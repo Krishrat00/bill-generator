@@ -1,65 +1,117 @@
 from flask import Flask, render_template, request, send_file
-from bill_template import create_photo_style_bill
-import io, fitz  # PyMuPDF
+import io
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+from PIL import Image
+import fitz  # PyMuPDF
 
 app = Flask(__name__)
-last_pdf_data = None  # stores last generated PDF bytes for download
+
+def create_pdf(data):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+
+    # Outer border
+    c.rect(10*mm, 10*mm, width-20*mm, height-20*mm)
+
+    # Header
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(width/2, height-20*mm, "ANANT CREATION")
+
+    c.setFont("Helvetica", 10)
+    c.drawString(20*mm, height-30*mm, f"Name: {data.get('customer_name', '')}")
+    c.drawRightString(width-20*mm, height-30*mm, f"Date: {data.get('date', '')}")
+
+    # Table column lines
+    table_top = height-50*mm
+    table_bottom = 40*mm
+    col_x = [20*mm, 90*mm, 120*mm, 150*mm, width-20*mm]
+
+    # vertical lines
+    for x in col_x:
+        c.line(x, table_bottom, x, table_top)
+
+    # horizontal lines (10 rows)
+    row_height = (table_top - table_bottom) / 10
+    for i in range(11):
+        y = table_bottom + i*row_height
+        c.line(20*mm, y, width-20*mm, y)
+
+    # headers
+    c.setFont("Helvetica-Bold", 9)
+    headers = ["Description", "Quantity", "Rate", "Amount"]
+    for i, h in enumerate(headers):
+        c.drawCentredString((col_x[i]+col_x[i+1])/2, table_top+5, h)
+
+    # fill rows with data
+    c.setFont("Helvetica", 9)
+    products = data.get("products", [])
+    for i, p in enumerate(products[:10]):
+        y = table_top - (i+0.7)*row_height
+        c.drawString(col_x[0]+2*mm, y, p.get("desc", ""))
+        c.drawCentredString((col_x[1]+col_x[2])/2, y, p.get("qty", ""))
+        c.drawCentredString((col_x[2]+col_x[3])/2, y, p.get("rate", ""))
+        c.drawCentredString((col_x[3]+col_x[4])/2, y, p.get("amount", ""))
+
+    # total
+    c.setFont("Helvetica-Bold", 10)
+    c.drawRightString(col_x[-1]-2*mm, table_bottom-10, f"TOTAL: {data.get('total', '')}")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
 
 @app.route('/')
-def index():
+def form():
     return render_template('form.html')
 
 @app.route('/preview', methods=['POST'])
-def preview_bill():
-    global last_pdf_data
-    # Collect items
-    item_names = request.form.getlist('item_name')
-    qtys = request.form.getlist('qty')
-    mtrs = request.form.getlist('mtr')
-    rates = request.form.getlist('rate')
-    amts = request.form.getlist('amount')
+def preview():
+    data = request.form.to_dict(flat=True)
+    products = []
+    for i in range(1, 11):
+        desc = request.form.get(f'desc{i}', '')
+        qty = request.form.get(f'qty{i}', '')
+        rate = request.form.get(f'rate{i}', '')
+        amount = request.form.get(f'amount{i}', '')
+        if desc or qty or rate or amount:
+            products.append({"desc": desc, "qty": qty, "rate": rate, "amount": amount})
+    data["products"] = products
+    buffer = create_pdf(data)
 
-    items = []
-    for i in range(len(item_names)):
-        if item_names[i].strip():
-            items.append({
-                "name": item_names[i],
-                "qty": qtys[i],
-                "mtr": mtrs[i],
-                "rate": rates[i],
-                "amount": amts[i],
-            })
-
-    data = {
-        "bill_no": request.form.get('bill_no',''),
-        "date": request.form.get('date',''),
-        "ch_no": request.form.get('ch_no',''),
-        "customer_name": request.form.get('customer_name',''),
-        "gstin": request.form.get('gstin',''),
-        "items": items,
-        "pcs_total": request.form.get('pcs_total',''),
-        "gst_amount": request.form.get('gst_amount',''),
-        "grand_total": request.form.get('grand_total','')
-    }
-
-    # Build PDF in memory
-    pdf_buffer = create_photo_style_bill(data)
-    last_pdf_data = pdf_buffer.getvalue()
-
-    # Render first page to PNG using PyMuPDF (no external poppler needed)
-    doc = fitz.open(stream=last_pdf_data, filetype="pdf")
-    page = doc.load_page(0)
-    pix = page.get_pixmap(dpi=150)
+    # convert pdf to image using PyMuPDF
+    doc = fitz.open(stream=buffer.getvalue(), filetype="pdf")
+    page = doc[0]
+    pix = page.get_pixmap()
     img_bytes = pix.tobytes("png")
 
-    return send_file(io.BytesIO(img_bytes), mimetype='image/png')
+    return send_file(
+        io.BytesIO(img_bytes),
+        mimetype='image/png',
+        as_attachment=False,
+        download_name='preview.png'
+    )
 
-@app.route('/download', methods=['GET'])
-def download_bill():
-    global last_pdf_data
-    if not last_pdf_data:
-        return "No bill generated yet", 400
-    return send_file(io.BytesIO(last_pdf_data), download_name="Bill.pdf", as_attachment=True)
+@app.route('/download', methods=['POST'])
+def download():
+    data = request.form.to_dict(flat=True)
+    products = []
+    for i in range(1, 11):
+        desc = request.form.get(f'desc{i}', '')
+        qty = request.form.get(f'qty{i}', '')
+        rate = request.form.get(f'rate{i}', '')
+        amount = request.form.get(f'amount{i}', '')
+        if desc or qty or rate or amount:
+            products.append({"desc": desc, "qty": qty, "rate": rate, "amount": amount})
+    data["products"] = products
+    buffer = create_pdf(data)
+    return send_file(buffer, as_attachment=True, download_name="bill.pdf", mimetype="application/pdf")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+    
