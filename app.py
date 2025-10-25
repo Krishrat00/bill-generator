@@ -49,8 +49,8 @@ def download():
     output = io.BytesIO()
     generate_invoice(data, output)
     output.seek(0)
-
-    return send_file(output, as_attachment=True, download_name="bill.pdf", mimetype="application/pdf")
+    filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
+    return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 
 if __name__ == '__main__':
