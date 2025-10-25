@@ -1,0 +1,6 @@
+_pycache_/*
+.vscode/*
+.venv39/*
+*._pycache_*/
+*.cpython*
+*.pdf
