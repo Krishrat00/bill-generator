@@ -1,0 +1,45 @@
+{
+    "CALCUTTA EXPRESS TRANSPORT SERVICE": {
+        "gstin": "09AAEFC1392H1ZH"
+    },
+    "KARTAR CARRIERS PVT. LTD.": {
+        "gstin": "07AAACK0250D1Z8"
+    },
+    "SHREE AZAD TRANSPORT COMPANY PVT LTD": {
+        "gstin": "09AAGCS4408M1ZZ"
+    },
+    "ROYAL LOGISTIC CARGO": {
+        "gstin": "24AAXFR1868A1Z0"
+    },
+    "PURVANCHAL PARCEL SERVICE": {
+        "gstin": "24CDOPK4227N1Z5"
+    },
+    "SUNDEEP TRANSPORT COMPANY": {
+        "gstin": "27AEFPY2405L1Z6"
+    },
+    "SHRI MAHARAJ LOGISTICS": {
+        "gstin": "23ABOFS6800M1ZT"
+    },
+    "HG SINGH LOGISTICS (P) LTD": {
+        "gstin": "09AACCH2918R1Z1"
+    },
+    "DELHI RAJASTHAN TRANSPORT COMPANY LIMITED": {
+        "gstin": "24AAACD4979N1Z6"
+    },
+    "AVINASH CARGO PRIVATE LIMITED": {
+        "gstin": "24AAFCA7488L1Z6"
+    },
+    "ACER GREEN CARRIERS PRIVATE LIMITED": {
+        "gstin": "24AANCA0312K1ZZ"
+    },
+    "SURAT BHILWARA PARCEL SERVICE": {
+        "gstin": "08BKJPS5604N1ZJ"
+    },
+    "DIAMOND TRANSPORT": {
+        "gstin": "24AGIPK9812C1ZL"
+    },
+    "DT": {
+        "name": "dt",
+        "gstin": "dgt"
+    }
+}

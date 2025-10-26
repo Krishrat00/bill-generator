@@ -1,104 +1,277 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Create Bill</title>
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body class="bg-light">
-<div class="container">
-  <h3 class="text-center my-3">Create Bill</h3>
+  <div class="container">
+    <h3 class="text-center my-3">Create Bill</h3>
 
-  <!-- FORM -->
-  <form id="billForm" class="bg-white p-3 rounded shadow-sm" action="/download" method="POST">
-    <div class="mb-2">
-      <label class="form-label">Invoice No</label>
-      <input type="text" name="bill_no" class="form-control" required>
-    </div>
+    <form id="billForm" class="bg-white p-3 rounded shadow-sm" action="/download" method="POST">
+      <div class="mb-2">
+        <label class="form-label">Invoice No</label>
+        <input type="text" name="bill_no" class="form-control" required>
+      </div>
 
-    <div class="mb-2">
-      <label class="form-label">Date</label>
-      <input type="date" name="date" class="form-control" required>
-    </div>
+      <div class="mb-2">
+        <label class="form-label">Date</label>
+        <input type="date" name="date" class="form-control" required>
+      </div>
 
-    <div class="mb-2">
-      <label class="form-label">Party Name</label>
-      <input type="text" name="customer_name" class="form-control" required>
-    </div>
+      <div class="mb-2">
+        <label class="form-label">Party Name</label>
+        <select name="customer_name" id="party_name" class="form-select">
+          <option value="">Select or Type Party</option>
+          {% for p in parties %}
+          <option value="{{ p }}">{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <div class="mb-2">
-      <label class="form-label">Place</label>
-      <input type="text" name="ch_no" class="form-control">
-    </div>
+      <input type="text" id="party_place" name="ch_no" class="form-control mb-2" placeholder="Enter or search city"
+        required>
+      <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
 
-    <div class="mb-2">
-      <label class="form-label">GSTIN</label>
-      <input type="text" name="gstin" class="form-control">
-    </div>
+      <div class="mb-2">
+        <label class="form-label">GSTIN</label>
+        <input type="text" id="party_gstin" name="gstin" class="form-control" placeholder="Enter GSTIN" required>
+      </div>
 
-    <div class="mb-2">
-      <label class="form-label">Transport</label>
-      <input type="text" name="transport" class="form-control">
-    </div>
+      <div class="mb-2">
+        <label class="form-label">Transport</label>
+        <select name="transport" id="transport" class="form-select">
+          <option value="">Select or Type Transport</option>
+          {% for t in transports %}
+          <option value="{{ t }}">{{ t }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <!-- ITEMS -->
-    <h5 class="mt-3">Items</h5>
-    <div id="items">
-      <div class="row mb-1">
-        <div class="col-12 col-md-3">
-          <select name="item_name[]" class="form-select" required>
-            <option value="" disabled>Select Item</option>
-            <option value="CITRA">CITRA</option>
-            <option value="COTTON">COTTON</option>
-            <option value="HI CHOICE">HI CHOICE</option>
-            <option value="KING COTTON">KING COTTON</option>
-            <option value="LINEN">LINEN</option>
-            <option value="MAGIC">MAGIC</option>
-            <option value="MANBHARI">MANBHARI</option>
-            <option value="PRINT">PRINT</option>
-            <option value="SAFARI">SAFARI</option>
-            <option value="SHRIMAN">SHRIMAN</option>
-          </select>
-        </div>
-        <div class="col-6 col-md-2">
-          <input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required>
-        </div>
-        <div class="col-6 col-md-2">
-          <input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required>
+      <div class="mb-2">
+        <label class="form-label">Transport GSTIN</label>
+        <input type="text" id="transport_gstin" class="form-control" placeholder="Enter GSTIN" required>
+      </div>
+
+      <h5 class="mt-3">Items</h5>
+      <div id="items">
+        <div class="row mb-1">
+          <div class="col-12 col-md-3">
+            <select name="item_name[]" class="form-select" required>
+              <option value="" disabled>Select Item</option>
+              <option value="CITRA">CITRA</option>
+              <option value="COTTON">COTTON</option>
+              <option value="HI CHOICE">HI CHOICE</option>
+              <option value="KING COTTON">KING COTTON</option>
+              <option value="LINEN">LINEN</option>
+              <option value="MAGIC">MAGIC</option>
+              <option value="MANBHARI">MANBHARI</option>
+              <option value="PRINT">PRINT</option>
+              <option value="SAFARI">SAFARI</option>
+              <option value="SHRIMAN">SHRIMAN</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required>
+          </div>
+          <div class="col-6 col-md-2">
+            <input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required>
+          </div>
         </div>
       </div>
-    </div>
+      <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addItem()">+ Add Item</button>
+      <button type="submit" class="btn btn-success w-100 mt-3">Download Bill PDF</button>
+    </form>
+  </div>
 
-    <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addItem()">+ Add Item</button>
-
-    <button type="submit" class="btn btn-success w-100 mt-3">Download Bill PDF</button>
-  </form>
-</div>
-
-<script>
-function addItem(){
-  const row = document.createElement("div");
-  row.className = "row mb-1";
-  row.innerHTML = `
+  <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+  <script>
+    function addItem() {
+      const row = document.createElement("div");
+      row.className = "row mb-1";
+      row.innerHTML = `
     <div class="col-12 col-md-3">
       <select name="item_name[]" class="form-select" required>
-        <option value="">Select Item</option>
-        <option value="Linen">Linen</option>
-        <option value="Shriman">Shriman</option>
-        <option value="King Kot">King Kot</option>
-        <option value="Trinyros 50mg Capsule">Trinyros 50mg Capsule</option>
+        <option value="" disabled>Select Item</option>
+        <option value="CITRA">CITRA</option>
+        <option value="COTTON">COTTON</option>
+        <option value="HI CHOICE">HI CHOICE</option>
+        <option value="KING COTTON">KING COTTON</option>
+        <option value="LINEN">LINEN</option>
+        <option value="MAGIC">MAGIC</option>
+        <option value="MANBHARI">MANBHARI</option>
+        <option value="PRINT">PRINT</option>
+        <option value="SAFARI">SAFARI</option>
+        <option value="SHRIMAN">SHRIMAN</option>
       </select>
     </div>
-    <div class="col-6 col-md-2">
-      <input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required>
-    </div>
-    <div class="col-6 col-md-2">
-      <input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required>
-    </div>
-  `;
-  document.getElementById("items").appendChild(row);
-}
-</script>
+    <div class="col-6 col-md-2"><input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required></div>
+    <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`;
+      document.getElementById("items").appendChild(row);
+    }
+
+  </script>
+  <script>
+    function fetchPartyDetails() {
+      const name = $('#party_name').val();
+      if (!name) return;
+
+      fetch(`/get_party_details?name=${encodeURIComponent(name)}`)
+        .then(res => res.json())
+        .then(data => {
+          const placeInput = document.getElementById("party_place");
+          const gstInput = document.getElementById("party_gstin");
+
+          gstInput.value = data.gstin || "";
+          placeInput.value = data.place || "";
+
+          if (data.fixed_place) {
+            gstInput.readOnly = true;
+            gstInput.classList.add("bg-light");
+
+            placeInput.readOnly = true;   // ✅ fixed place: cannot edit
+            placeInput.classList.add("bg-light");
+          } else {
+            gstInput.readOnly = false;
+            gstInput.classList.remove("bg-light");
+
+            placeInput.readOnly = false;  // ✅ editable if not fixed
+            placeInput.classList.remove("bg-light");
+          }
+        });
+    }
+
+
+    function fetchTransportDetails() {
+      const name = $('#transport').val();
+      if (!name) return;
+      const gstInput = document.getElementById("transport_gstin");
+
+      fetch(`/get_transport_details?name=${encodeURIComponent(name)}`)
+        .then(res => res.json())
+        .then(data => {
+          gstInput.value = data.gstin || "";
+          if (data.gstin) {
+            gstInput.readOnly = true;
+            gstInput.classList.add("bg-light");
+          } else {
+            gstInput.readOnly = false;
+            gstInput.classList.remove("bg-light");
+          }
+        });
+    }
+    $(document).ready(function () {
+      // Party select2
+      $('#party_name').select2({ tags: true, width: '100%', placeholder: "Select or type party name" })
+        .on('change', fetchPartyDetails);
+
+      $('#transport').select2({ tags: true, width: '100%', placeholder: "Select or type transport name" })
+        .on('change', fetchTransportDetails);
+
+      // Form submit validation
+      // Form submit validation + pending request
+      $('#billForm').on('submit', async function (e) {
+        const partyName = $('#party_name').val().trim();
+        const partyPlace = $('#party_place').val().trim();
+        const partyGstin = $('#party_gstin').val().trim();
+        const transportName = $('#transport').val().trim();
+        const transportGstin = $('#transport_gstin').val().trim();
+
+        // Validate required fields
+        if (!partyName || !partyPlace || !partyGstin) {
+          alert("Please fill Party Name, Place and GSTIN before submitting.");
+          e.preventDefault();
+          return false;
+        }
+        if (transportName && !transportGstin) {
+          alert("Please enter Transport GSTIN.");
+          e.preventDefault();
+          return false;
+        }
+
+        // Send pending request for party if new
+        await fetch('/add_pending', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'party', name: partyName, gstin: partyGstin, place: partyPlace })
+        });
+
+        // Send pending request for transport if new and GSTIN filled
+        if (transportName && transportGstin) {
+          await fetch('/add_pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: 'transport', name: transportName, gstin: transportGstin, place: "" })
+          });
+        }
+
+        // Form will now submit normally
+      });
+
+    });
+  </script>
+
+  <script>
+    const input = document.getElementById("party_place");
+    const suggestionBox = document.getElementById("citySuggestions");
+
+    input.addEventListener("input", async function () {
+      const query = this.value.trim();
+      if (query.length < 3) {
+        suggestionBox.style.display = "none";
+        return;
+      }
+
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`);
+      const data = await res.json();
+
+      suggestionBox.innerHTML = "";
+      data.forEach(place => {
+        const addr = place.address || {};
+        const city = addr.city || addr.town || addr.village || addr.county || place.display_name.split(",")[0];
+        const state = addr.state || "—";
+        const option = document.createElement("li");
+        option.className = "list-group-item list-group-item-action";
+        option.textContent = `${city} (${state})`;
+        option.onclick = () => {
+          input.value = option.textContent;
+          suggestionBox.style.display = "none";
+
+          // Save this city to your backend cache
+          fetch(`/save_city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}`)
+            .then(() => {
+              // Check if city already exists in dropdown
+              const select = document.getElementById("party_place");
+              const exists = Array.from(select.options).some(opt => opt.text === `${city} (${state})`);
+              if (!exists) {
+                const newOption = new Option(`${city} (${state})`, `${city} (${state})`);
+                select.add(newOption);
+              }
+            });
+        };
+        suggestionBox.appendChild(option);
+      });
+
+      suggestionBox.style.display = "block";
+    });
+
+    document.addEventListener("click", e => {
+      if (!suggestionBox.contains(e.target) && e.target !== input) {
+        suggestionBox.style.display = "none";
+      }
+    });
+
+
+  </script>
+
+  </script>
+
 </body>
+
 </html>

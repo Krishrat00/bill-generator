@@ -1,0 +1,14 @@
+{
+    "party:dummy2": {
+        "type": "party",
+        "name": "dummy2",
+        "gstin": "ABC123",
+        "place": "Ahmedabad (Gujarat)"
+    },
+    "transport:dummy2_t": {
+        "type": "transport",
+        "name": "dummy2_t",
+        "gstin": "12345",
+        "place": ""
+    }
+}
