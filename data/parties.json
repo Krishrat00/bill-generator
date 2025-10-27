@@ -1,25 +1,3 @@
 {
-    "ANANT TEXTILES": {
-        "name": "ANANT TEXTILES",
-        "gstin": "24AAAAA0000A1Z5",
-        "place": "Surat",
-        "fixed_place": false
-    },
-    "SHRIMAN CREATION": {
-        "gstin": "24BBBBB0000B1Z6",
-        "place": "Ahmedabad",
-        "fixed_place": false
-    },
-    "DUMMY": {
-        "name": "dummy",
-        "gstin": "123",
-        "place": "Hola",
-        "fixed_place": false
-    },
-    "DP": {
-        "name": "dp",
-        "gstin": "dgp",
-        "place": "Surat (Gujarat)",
-        "fixed_place": false
-    }
+    
 }
