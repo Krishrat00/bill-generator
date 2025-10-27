@@ -118,6 +118,7 @@ def download():
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 # ---------- Admin Login ----------
+@app.route("/admin", methods=["GET","POST"])
 @app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
     if request.method=="POST":
