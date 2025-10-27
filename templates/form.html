@@ -86,15 +86,8 @@
       </div>
       <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addItem()">+ Add Item</button>
       <button type="submit" class="btn btn-success w-100 mt-3">Download Bill PDF</button>
-    </form>
-    <button id="generateEWB" class="btn btn-primary mt-2">Generate EWB</button>
-    <h5 class="mt-4">Download e-Way Bill</h5>
-    <form id="ewayForm" action="/download_eway" method="POST">
-      <input type="text" name="eway_no" placeholder="Enter eWay Bill No" class="form-control mb-2" required>
-      <input type="date" name="date" placeholder="Invoice Date" class="form-control mb-2" required>
-      <input type="text" name="gstin" placeholder="GSTIN" class="form-control mb-2" required>
-      <input type="text" name="bill_no" placeholder="Invoice No" class="form-control mb-2" required>
-      <button type="submit" class="btn btn-primary">Download EWB</button>
+      <button id="generateEWB" class="btn btn-primary mt-2">Generate EWB</button>
+
     </form>
   </div>
 
@@ -137,7 +130,7 @@
         .then(data => {
           const placeInput = document.getElementById("party_place");
           const gstInput = document.getElementById("party_gstin");
-
+          console.log("Party Data",data);
           gstInput.value = data.gstin || "";
           placeInput.value = data.place || "";
 

@@ -1,3 +1,20 @@
 {
-    
+    "M/S AFZAL SAREE CENTRE": {
+        "name": "M/S AFZAL SAREE CENTRE",
+        "gstin": "09AIRPA6082D1Z7",
+        "place": "MAUNATH BHANJAN (Uttar Pradesh)",
+        "fixed_place": true
+    },
+    "M/S JAWED AHMED": {
+        "name": "M/S JAWED AHMED",
+        "gstin": "09APDPA6944B1Z8",
+        "place": "MAUNATH BHANJAN (Uttar Pradesh)",
+        "fixed_place": true
+    },
+    "HIRA SAREE CENTRE": {
+        "name": "HIRA SAREE CENTRE",
+        "gstin": "09AGLPA1042M2ZG",
+        "place": "MAUNATH BHANJAN (Uttar Pradesh)",
+        "fixed_place": true
+    }
 }

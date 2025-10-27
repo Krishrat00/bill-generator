@@ -3,7 +3,6 @@ import io, os
 from datetime import datetime
 from bill_template import generate_invoice
 from data_manager import DataManager
-# from ewb_helper import open_eway_portal
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
@@ -34,8 +33,10 @@ def form():
 def get_party_details():
     name = request.args.get("name")
     party = data_manager.get_party(name)  # correct method
+    print("Party Details Requested:")  # Debug print
     if not party:
         return jsonify({"gstin": "", "place": "", "fixed_place": False})
+        print("No party found.")  # Debug print
     return jsonify({
         "gstin": party.get("gstin",""),
         "place": party.get("place",""),
@@ -108,7 +109,9 @@ def download():
         "date": data["date"],
         "party_gstin": data["party_gstin"],
         "place": data["place"],
-        "total_value": total  # ✅ use returned value
+        "total_value": total,  # ✅ use returned value
+        "party_pincode":"", 
+        "approx_distance": ""  # You can add logic to calculate distance if needed
     }
     output.seek(0)
     filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
