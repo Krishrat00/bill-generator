@@ -151,3 +151,5 @@ def generate_invoice(data, filename="invoice_fixed.pdf"):
 
     c.save()
     print(f"✅ Invoice generated successfully: {filename}")
+
+    return total

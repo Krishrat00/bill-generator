@@ -33,7 +33,7 @@
           {% endfor %}
         </select>
       </div>
-
+              <label class="form-label">Party City</label>
       <input type="text" id="party_place" name="ch_no" class="form-control mb-2" placeholder="Enter or search city"
         required>
       <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
@@ -87,7 +87,17 @@
       <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addItem()">+ Add Item</button>
       <button type="submit" class="btn btn-success w-100 mt-3">Download Bill PDF</button>
     </form>
+    <button id="generateEWB" class="btn btn-primary mt-2">Generate EWB</button>
+    <h5 class="mt-4">Download e-Way Bill</h5>
+    <form id="ewayForm" action="/download_eway" method="POST">
+      <input type="text" name="eway_no" placeholder="Enter eWay Bill No" class="form-control mb-2" required>
+      <input type="date" name="date" placeholder="Invoice Date" class="form-control mb-2" required>
+      <input type="text" name="gstin" placeholder="GSTIN" class="form-control mb-2" required>
+      <input type="text" name="bill_no" placeholder="Invoice No" class="form-control mb-2" required>
+      <button type="submit" class="btn btn-primary">Download EWB</button>
+    </form>
   </div>
+
 
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
@@ -269,9 +279,51 @@
 
 
   </script>
+  <script>
+    document.getElementById("generateEWB").addEventListener("click", (e) => {
+      e.preventDefault();
+      const form = document.getElementById("billForm");
 
+      // Collect invoice data to sessionStorage
+      const items = [];
+      const names = form.querySelectorAll("select[name='item_name[]']");
+      const qtys = form.querySelectorAll("input[name='qty[]']");
+      const rates = form.querySelectorAll("input[name='rate[]']");
+
+      let total_value = 0;
+      for (let i = 0; i < names.length; i++) {
+        if (names[i].value && qtys[i].value && rates[i].value) {
+          const itemTotal = parseFloat(qtys[i].value) * parseFloat(rates[i].value);
+          total_value += itemTotal;
+          items.push({
+            name: names[i].value,
+            qty: parseFloat(qtys[i].value),
+            rate: parseFloat(rates[i].value),
+            amount: itemTotal
+          });
+        }
+      }
+
+      // console.log(form.querySelector("input#transport_gstin").value);
+      // console.log("Hii")
+      // console.log(form.querySelector("input#party_place").value);
+      const invoiceData = {
+        invoice_no: form.querySelector("input[name='bill_no']").value,
+        date: form.querySelector("input[name='date']").value,
+        party_name: form.querySelector("select[name='customer_name']").value,
+        party_gstin: form.querySelector("input[name='gstin']").value,
+        transport: form.querySelector("select[name='transport']").value,
+        transport_gstin: form.querySelector("input#transport_gstin").value,
+        total_value: total_value.toFixed(2)
+      };
+
+      // Save to sessionStorage
+      sessionStorage.setItem("current_invoice", JSON.stringify(invoiceData));
+
+      // Redirect to message.html
+      window.location.href = "/message";
+    });
   </script>
-
 </body>
 
 </html>

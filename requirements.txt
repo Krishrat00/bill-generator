@@ -3,3 +3,6 @@ reportlab
 Pillow
 pdf2image
 num2words
+selenium
+pytesseract
+webdriver-manager
