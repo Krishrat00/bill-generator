@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Panel</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background: #f5f6fa; }
+        h2 { text-align: center; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; margin-bottom: 30px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #2f3640; color: white; }
+        tr:nth-child(even) { background: #f2f2f2; }
+        button { padding: 5px 10px; margin: 3px; border: none; border-radius: 4px; cursor: pointer; }
+        .delete-btn { background: #e84118; color: white; }
+        .approve-btn { background: #44bd32; color: white; }
+        .reject-btn { background: #e1b12c; color: white; }
+        .add-btn { background: #0097e6; color: white; float: right; margin-bottom: 10px; }
+        select, input { padding: 6px; }
+    </style>
+</head>
+<body>
+    <h2>Admin Panel</h2>
+
+    <div>
+        <label for="tableSelect">Select Table:</label>
+        <select id="tableSelect">
+            <option value="parties">Parties</option>
+            <option value="transports">Transports</option>
+            <option value="cities">Cities</option>
+            <option value="pending_requests">Pending Requests</option>
+        </select>
+        <button class="add-btn" onclick="addRecord()">+ Add Record</button>
+    </div>
+
+    <table id="dataTable">
+        <thead></thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        const tableSelect = document.getElementById('tableSelect');
+        const dataTable = document.getElementById('dataTable');
+
+        async function loadTable() {
+            const table = tableSelect.value;
+            const res = await fetch(`/admin/data?table=${table}`);
+            const data = await res.json();
+            renderTable(data, table);
+        }
+
+        function renderTable(data, table) {
+            const thead = dataTable.querySelector('thead');
+            const tbody = dataTable.querySelector('tbody');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                thead.innerHTML = '<tr><th>No Data Found</th></tr>';
+                return;
+            }
+
+            const keys = Object.keys(data[0]);
+            thead.innerHTML = `<tr>${keys.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
+
+            data.forEach(row => {
+                let rowHTML = '<tr>';
+                keys.forEach(k => rowHTML += `<td>${row[k]}</td>`);
+                rowHTML += `<td>
+                    <button class="delete-btn" onclick="deleteRecord('${table}', ${row.id})">Delete</button>
+                </td>`;
+                if (table === 'pending_requests') {
+                    rowHTML += `<td>
+                        <button class="approve-btn" onclick="approve('${row.type}', '${row.name}')">Approve</button>
+                        <button class="reject-btn" onclick="reject('${row.type}', '${row.name}')">Reject</button>
+                    </td>`;
+                }
+                rowHTML += '</tr>';
+                tbody.innerHTML += rowHTML;
+            });
+        }
+
+        async function deleteRecord(table, id) {
+            if (!confirm('Are you sure you want to delete this record?')) return;
+            await fetch('/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table, id })
+            });
+            loadTable();
+        }
+
+        async function approve(type, name) {
+            await fetch(`/admin/approve/${type}/${name}`);
+            loadTable();
+        }
+
+        async function reject(type, name) {
+            await fetch(`/admin/reject/${type}/${name}`);
+            loadTable();
+        }
+
+        async function addRecord() {
+            const table = tableSelect.value;
+            const payload = { table };
+
+            if (table === 'parties') {
+                payload.name = prompt('Party Name:');
+                payload.gstin = prompt('GSTIN:');
+                payload.place = prompt('Place:');
+                payload.fixed_place = confirm('Fixed place? (OK for Yes)');
+            } else if (table === 'transports') {
+                payload.name = prompt('Transport Name:');
+                payload.gstin = prompt('GSTIN:');
+            } else if (table === 'cities') {
+                payload.city = prompt('City:');
+                payload.state = prompt('State:');
+            } else if (table === 'pending_requests') {
+                payload.type = prompt('Type (party/transport):');
+                payload.name = prompt('Name:');
+                payload.gstin = prompt('GSTIN:');
+                payload.place = prompt('Place (optional):');
+            }
+
+            await fetch('/admin/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            loadTable();
+        }
+
+        tableSelect.addEventListener('change', loadTable);
+        window.onload = loadTable;
+    </script>
+</body>
+</html>

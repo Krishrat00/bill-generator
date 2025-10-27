@@ -97,7 +97,6 @@ def download():
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 # ---------- Admin ----------
-@app.route("/admin", methods=["GET", "POST"])
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     if request.method == "POST":
@@ -135,6 +134,67 @@ def admin_reject(type_, name):
         return redirect("/admin/login")
     data_manager.reject_pending(type_, name)
     return redirect("/admin/pending")
+
+# --------------------------
+# ✅ ADMIN PANEL MANAGEMENT
+# --------------------------
+from flask import jsonify, request
+from db import get_db
+conn = get_db()
+@app.route("/admin")
+def admin_home():
+    return render_template("admin.html")
+
+
+@app.route("/admin/data")
+def admin_data():
+    table = request.args.get("table")
+    allowed = ["parties", "transports", "cities", "pending_requests"]
+    if table not in allowed:
+        return jsonify({"error": "Invalid table"}), 400
+    
+    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/admin/add", methods=["POST"])
+def admin_add():
+    data = request.json
+    table = data.get("table")
+
+    if table == "parties":
+        conn.execute("INSERT INTO parties (name, gstin, place, fixed_place) VALUES (?, ?, ?, ?)",
+                        (data["name"], data["gstin"], data["place"], data.get("fixed_place", 0)))
+    elif table == "transports":
+        conn.execute("INSERT INTO transports (name, gstin) VALUES (?, ?)",
+                        (data["name"], data["gstin"]))
+    elif table == "cities":
+        conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)",
+                        (data["city"], data["state"]))
+    elif table == "pending_requests":
+        conn.execute("INSERT INTO pending_requests (type, name, gstin, place) VALUES (?, ?, ?, ?)",
+                        (data["type"], data["name"], data["gstin"], data.get("place", "")))
+    else:
+        return jsonify({"error": "Invalid table"}), 400
+
+    conn.commit()
+    return jsonify({"status": "ok"})
+
+
+@app.route("/admin/delete", methods=["POST"])
+def admin_delete():
+    data = request.json
+    table = data.get("table")
+    record_id = data.get("id")
+
+    allowed = ["parties", "transports", "cities", "pending_requests"]
+    if table not in allowed:
+        return jsonify({"error": "Invalid table"}), 400
+    
+    conn.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
+    conn.commit()
+    return jsonify({"status": "deleted"})
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5091))
