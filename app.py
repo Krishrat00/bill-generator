@@ -18,12 +18,25 @@ def form():
     transports = data_manager.get_all_transports()
     return render_template("form.html", parties=parties, transports=transports)
 
+
+# @app.route("/download_eway", methods=["POST"])
+# def download_eway():
+#     data = request.json
+#     ewb_no = data.get("ewb_no")
+#     invoice_no = data.get("invoice_no")
+#     date = data.get("date")
+
+#     open_eway_portal(ewb_no, invoice_no, date)
+#     return jsonify({"status": "ok"})
+
 @app.route("/get_party_details")
 def get_party_details():
     name = request.args.get("name")
     party = data_manager.get_party(name)  # correct method
+    print("Party Details Requested:")  # Debug print
     if not party:
         return jsonify({"gstin": "", "place": "", "fixed_place": False})
+        print("No party found.")  # Debug print
     return jsonify({
         "gstin": party.get("gstin",""),
         "place": party.get("place",""),
@@ -57,6 +70,10 @@ def add_pending():
         place=data.get("place","")
     )
     return jsonify({"status":"ok"})
+# ---------- Message Page ----------
+@app.route("/message")
+def message_page():
+    return render_template("message.html")
 
 # ---------- Download Bill ----------
 @app.route("/download", methods=["POST"])
@@ -86,12 +103,22 @@ def download():
             data["items"].append({"name": name, "qty": float(qty), "rate": float(rate)})
 
     output = io.BytesIO()
-    generate_invoice(data, output)
+    total = generate_invoice(data, output)  # ✅ capture grand total
+    session['invoice_data'] = {
+        "invoice_no": data["invoice_no"],
+        "date": data["date"],
+        "party_gstin": data["party_gstin"],
+        "place": data["place"],
+        "total_value": total,  # ✅ use returned value
+        "party_pincode":"", 
+        "approx_distance": ""  # You can add logic to calculate distance if needed
+    }
     output.seek(0)
     filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
 # ---------- Admin Login ----------
+@app.route("/admin", methods=["GET","POST"])
 @app.route("/admin/login", methods=["GET","POST"])
 def admin_login():
     if request.method=="POST":
