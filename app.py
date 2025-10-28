@@ -75,12 +75,23 @@ def download():
         "place": form.get("ch_no", ""),
         "party_gstin": form.get("gstin", ""),
         "transport": form.get("transport", ""),
+        "units" : form.getlist('unit[]'),
         "items": []
     }
 
-    for name, qty, rate in zip(form.getlist("item_name[]"), form.getlist("qty[]"), form.getlist("rate[]")):
-        if name and qty and rate:
-            data["items"].append({"name": name, "qty": float(qty), "rate": float(rate)})
+    for name, qty, unit, rate in zip(
+        form.getlist("item_name[]"),
+        form.getlist("qty[]"),
+        form.getlist("unit[]"),
+        form.getlist("rate[]")
+    ):
+        if name and qty and unit and rate:
+            data["items"].append({
+                "name": name,
+                "qty": float(qty),
+                "unit": unit,
+                "rate": float(rate)
+            })
 
     output = io.BytesIO()
     total = generate_invoice(data, output)
@@ -119,7 +130,7 @@ def admin_pending():
     if not session.get("admin"):
         return redirect("/admin/login")
     pending = data_manager.get_all_pending()
-    return render_template("admin_tab.html", pending=pending)
+    return render_template("admin.html", pending=pending)
 
 @app.route("/admin/approve/<type_>/<name>")
 def admin_approve(type_, name):
@@ -149,7 +160,7 @@ def admin_home():
 @app.route("/admin/data")
 def admin_data():
     table = request.args.get("table")
-    allowed = ["parties", "transports", "cities", "pending_requests"]
+    allowed = ["parties", "transports", "cities", "pending_requests","bank_details"]
     if table not in allowed:
         return jsonify({"error": "Invalid table"}), 400
     
@@ -174,6 +185,9 @@ def admin_add():
     elif table == "pending_requests":
         conn.execute("INSERT INTO pending_requests (type, name, gstin, place) VALUES (?, ?, ?, ?)",
                         (data["type"], data["name"], data["gstin"], data.get("place", "")))
+    elif table == "bank_details":
+        conn.execute("INSERT INTO bank_details (bank_name, account_number, ifsc) VALUES (?, ?, ?)",
+                        (data["bank_name"], data["account_number"], data["ifsc"]))
     else:
         return jsonify({"error": "Invalid table"}), 400
 

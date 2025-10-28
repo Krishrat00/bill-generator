@@ -33,7 +33,7 @@
           {% endfor %}
         </select>
       </div>
-              <label class="form-label">Party City</label>
+      <label class="form-label">Party City</label>
       <input type="text" id="party_place" name="ch_no" class="form-control mb-2" placeholder="Enter or search city"
         required>
       <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
@@ -79,6 +79,13 @@
           <div class="col-6 col-md-2">
             <input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required>
           </div>
+          <div class="col-4 col-md-2">
+            <select name="unit[]" class="form-select" required>
+              <option value="Mtr">Mtr</option>
+              <option value="Pcs">Pcs</option>
+              <option value="Kgs">Kgs</option>
+            </select>
+          </div>
           <div class="col-6 col-md-2">
             <input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required>
           </div>
@@ -115,6 +122,13 @@
       </select>
     </div>
     <div class="col-6 col-md-2"><input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required></div>
+    <div class="col-4 col-md-2">
+      <select name="unit[]" class="form-select" required>
+        <option value="Mtr">Mtr</option>
+        <option value="Pcs">Pcs</option>
+        <option value="Kgs">Kgs</option>
+      </select>
+    </div>    
     <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`;
       document.getElementById("items").appendChild(row);
     }
@@ -130,10 +144,9 @@
         .then(data => {
           const placeInput = document.getElementById("party_place");
           const gstInput = document.getElementById("party_gstin");
-          console.log("Party Data",data);
+          console.log("Party Data", data);
           gstInput.value = data.gstin || "";
           placeInput.value = data.place || "";
-
           if (data.fixed_place) {
             gstInput.readOnly = true;
             gstInput.classList.add("bg-light");
