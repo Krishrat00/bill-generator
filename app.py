@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
-import io, os
+import io, os, re
 from datetime import datetime
 from bill_template import generate_invoice
 from data_manager import DatabaseManager
@@ -73,7 +73,7 @@ def download():
         "date": formatted_date,
         "party_name": form.get("customer_name", ""),
         "place": form.get("ch_no", ""),
-        "party_gstin": form.get("gstin", ""),
+        "party_gstin": format_gstin(form.get("gstin", "")),
         "transport": form.get("transport", ""),
         "units" : form.getlist('unit[]'),
         "items": []
@@ -209,6 +209,40 @@ def admin_delete():
     conn.commit()
     return jsonify({"status": "deleted"})
 
+def format_gstin(gstin: str) -> str:
+    """Format GSTIN by inserting spaces every 4 characters for readability."""
+    gstin = gstin.replace(" ", "").upper()  # Remove existing spaces and normalize case
+    if identify_number_type(gstin) != "GST" and identify_number_type(gstin) != "INVALID":
+        return gstin  # Return as is if not a valid GSTIN
+    else:
+        return f"URP-{gstin}"
+    
+
+def identify_number_type(number: str) -> str:
+    """
+    Identify whether the input is a GST number, PAN number, or Aadhaar number.
+    Returns one of: 'GST', 'PAN', 'AADHAAR', or 'INVALID'
+    """
+
+    number = number.strip().upper()  # Normalize input
+    
+    # GSTIN format: 15 characters -> 2 digits, 10 chars (PAN), 1 char, Z, 1 checksum
+    gst_pattern = re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$')
+    
+    # PAN format: 10 characters -> 5 letters, 4 digits, 1 letter
+    pan_pattern = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$')
+    
+    # Aadhaar format: 12 digits (may contain spaces)
+    aadhaar_pattern = re.compile(r'^[0-9]{12}$')
+    
+    if gst_pattern.match(number):
+        return "GST"
+    elif pan_pattern.match(number):
+        return "PAN"
+    elif aadhaar_pattern.match(number):
+        return "AADHAAR"
+    else:
+        return "INVALID"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5091))
