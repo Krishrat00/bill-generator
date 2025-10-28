@@ -6,3 +6,4 @@ num2words
 selenium
 pytesseract
 webdriver-manager
+tabulate

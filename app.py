@@ -2,11 +2,11 @@ from flask import Flask, render_template, request, jsonify, send_file, session, 
 import io, os
 from datetime import datetime
 from bill_template import generate_invoice
-from data_manager import DataManager
+from data_manager import DatabaseManager
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
-data_manager = DataManager()
+data_manager = DatabaseManager()
 
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "password")
@@ -18,39 +18,21 @@ def form():
     transports = data_manager.get_all_transports()
     return render_template("form.html", parties=parties, transports=transports)
 
-
-# @app.route("/download_eway", methods=["POST"])
-# def download_eway():
-#     data = request.json
-#     ewb_no = data.get("ewb_no")
-#     invoice_no = data.get("invoice_no")
-#     date = data.get("date")
-
-#     open_eway_portal(ewb_no, invoice_no, date)
-#     return jsonify({"status": "ok"})
-
 @app.route("/get_party_details")
 def get_party_details():
     name = request.args.get("name")
-    party = data_manager.get_party(name)  # correct method
-    print("Party Details Requested:")  # Debug print
+    party = data_manager.get_party(name)
     if not party:
         return jsonify({"gstin": "", "place": "", "fixed_place": False})
-        print("No party found.")  # Debug print
-    return jsonify({
-        "gstin": party.get("gstin",""),
-        "place": party.get("place",""),
-        "fixed_place": party.get("fixed_place", False)  # ✅ return stored value
-    })
+    return jsonify(party)
 
 @app.route("/get_transport_details")
 def get_transport_details():
     name = request.args.get("name")
-    transport = data_manager.get_transport(name)  # ✅ correct method
+    transport = data_manager.get_transport(name)
     if not transport:
         return jsonify({"gstin": ""})
-    return jsonify({"gstin": transport.get("gstin","")})
-
+    return jsonify(transport)
 
 @app.route("/save_city")
 def save_city():
@@ -59,23 +41,21 @@ def save_city():
     data_manager.add_city(city, state)
     return jsonify({"status": "ok"})
 
-# ---------- Add Pending ----------
 @app.route("/add_pending", methods=["POST"])
 def add_pending():
     data = request.get_json()
     data_manager.add_pending(
         type_=data["type"],
         name=data["name"],
-        gstin=data.get("gstin",""),
-        place=data.get("place","")
+        gstin=data.get("gstin", ""),
+        place=data.get("place", "")
     )
-    return jsonify({"status":"ok"})
-# ---------- Message Page ----------
+    return jsonify({"status": "ok"})
+
 @app.route("/message")
 def message_page():
     return render_template("message.html")
 
-# ---------- Download Bill ----------
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
@@ -103,28 +83,26 @@ def download():
             data["items"].append({"name": name, "qty": float(qty), "rate": float(rate)})
 
     output = io.BytesIO()
-    total = generate_invoice(data, output)  # ✅ capture grand total
+    total = generate_invoice(data, output)
     session['invoice_data'] = {
         "invoice_no": data["invoice_no"],
         "date": data["date"],
         "party_gstin": data["party_gstin"],
         "place": data["place"],
-        "total_value": total,  # ✅ use returned value
-        "party_pincode":"", 
-        "approx_distance": ""  # You can add logic to calculate distance if needed
+        "total_value": total,
     }
+
     output.seek(0)
     filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
 
-# ---------- Admin Login ----------
-@app.route("/admin", methods=["GET","POST"])
-@app.route("/admin/login", methods=["GET","POST"])
+# ---------- Admin ----------
+@app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
-    if request.method=="POST":
-        user = request.form.get("username","")
-        pwd = request.form.get("password","")
-        if user==ADMIN_USER and pwd==ADMIN_PASS:
+    if request.method == "POST":
+        user = request.form.get("username")
+        pwd = request.form.get("password")
+        if user == ADMIN_USER and pwd == ADMIN_PASS:
             session["admin"] = True
             return redirect("/admin/pending")
         else:
@@ -136,26 +114,88 @@ def admin_logout():
     session.pop("admin", None)
     return redirect("/admin/login")
 
-# ---------- Admin Pending ----------
 @app.route("/admin/pending")
 def admin_pending():
-    if not session.get("admin"): return redirect("/admin/login")
+    if not session.get("admin"):
+        return redirect("/admin/login")
     pending = data_manager.get_all_pending()
     return render_template("admin_tab.html", pending=pending)
 
-@app.route("/admin/approve/<key>")
-def admin_approve(key):
-    if not session.get("admin"): return redirect("/admin/login")
-    data_manager.approve_pending(key)
+@app.route("/admin/approve/<type_>/<name>")
+def admin_approve(type_, name):
+    if not session.get("admin"):
+        return redirect("/admin/login")
+    data_manager.approve_pending(type_, name)
     return redirect("/admin/pending")
 
-@app.route("/admin/reject/<key>")
-def admin_reject(key):
-    if not session.get("admin"): return redirect("/admin/login")
-    data_manager.reject_pending(key)
+@app.route("/admin/reject/<type_>/<name>")
+def admin_reject(type_, name):
+    if not session.get("admin"):
+        return redirect("/admin/login")
+    data_manager.reject_pending(type_, name)
     return redirect("/admin/pending")
 
+# --------------------------
+# ✅ ADMIN PANEL MANAGEMENT
+# --------------------------
+from flask import jsonify, request
+from db import get_db
+conn = get_db()
+@app.route("/admin")
+def admin_home():
+    return render_template("admin.html")
 
-if __name__ == '__main__':
+
+@app.route("/admin/data")
+def admin_data():
+    table = request.args.get("table")
+    allowed = ["parties", "transports", "cities", "pending_requests"]
+    if table not in allowed:
+        return jsonify({"error": "Invalid table"}), 400
+    
+    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/admin/add", methods=["POST"])
+def admin_add():
+    data = request.json
+    table = data.get("table")
+
+    if table == "parties":
+        conn.execute("INSERT INTO parties (name, gstin, place, fixed_place) VALUES (?, ?, ?, ?)",
+                        (data["name"], data["gstin"], data["place"], data.get("fixed_place", 0)))
+    elif table == "transports":
+        conn.execute("INSERT INTO transports (name, gstin) VALUES (?, ?)",
+                        (data["name"], data["gstin"]))
+    elif table == "cities":
+        conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)",
+                        (data["city"], data["state"]))
+    elif table == "pending_requests":
+        conn.execute("INSERT INTO pending_requests (type, name, gstin, place) VALUES (?, ?, ?, ?)",
+                        (data["type"], data["name"], data["gstin"], data.get("place", "")))
+    else:
+        return jsonify({"error": "Invalid table"}), 400
+
+    conn.commit()
+    return jsonify({"status": "ok"})
+
+
+@app.route("/admin/delete", methods=["POST"])
+def admin_delete():
+    data = request.json
+    table = data.get("table")
+    record_id = data.get("id")
+
+    allowed = ["parties", "transports", "cities", "pending_requests"]
+    if table not in allowed:
+        return jsonify({"error": "Invalid table"}), 400
+    
+    conn.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
+    conn.commit()
+    return jsonify({"status": "deleted"})
+
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5091))
     app.run(host="0.0.0.0", port=port, debug=True)
