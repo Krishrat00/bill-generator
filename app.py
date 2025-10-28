@@ -23,7 +23,7 @@ def get_party_details():
     name = request.args.get("name")
     party = data_manager.get_party(name)
     if not party:
-        return jsonify({"gstin": "", "place": "", "fixed_place": False})
+        return jsonify({"gstin": "", "pan": "", "aadhar": "", "place": "", "fixed_place": False})
     return jsonify(party)
 
 @app.route("/get_transport_details")
@@ -59,9 +59,16 @@ def message_page():
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
-    for field in ["bill_no","date","customer_name","ch_no","gstin","transport"]:
+
+    # Required fields except GSTIN (handled separately)
+    required_fields = ["bill_no", "date", "customer_name", "ch_no", "transport"]
+    for field in required_fields:
         if not form.get(field):
             return f"{field} is required", 400
+
+    # Validate ID fields (at least one of GSTIN, PAN, or Aadhaar must exist)
+    if not any([form.get("gstin"), form.get("pan"), form.get("aadhar")]):
+        return "At least one of GSTIN, PAN, or Aadhaar is required", 400
 
     try:
         formatted_date = datetime.strptime(form.get("date", ""), "%Y-%m-%d").strftime("%d/%m/%Y")
@@ -74,10 +81,14 @@ def download():
         "party_name": form.get("customer_name", ""),
         "place": form.get("ch_no", ""),
         "party_gstin": form.get("gstin", ""),
+        "party_pan": form.get("pan", ""),
+        "party_aadhar": form.get("aadhar", ""),
         "transport": form.get("transport", ""),
-        "units" : form.getlist('unit[]'),
+        "units": form.getlist('unit[]'),
         "items": []
     }
+
+    # 🧠 Auto-derive GSTIN for URP case
 
     for name, qty, unit, rate in zip(
         form.getlist("item_name[]"),
@@ -93,8 +104,25 @@ def download():
                 "rate": float(rate)
             })
 
+    existing_party = data_manager.get_party(data["party_name"])
+    if not existing_party:
+        data_manager.add_pending(
+            type_="party",
+            name=data["party_name"],
+            gstin=data.get("party_gstin", ""),
+            pan=data.get("party_pan", ""),
+            aadhar=data.get("party_aadhar", ""),
+            place=data.get("place", "")
+        )
+    if not data["party_gstin"]:
+        if data["party_pan"]:
+            data["party_gstin"] = f"URP - {data['party_pan']}"
+        elif data["party_aadhar"]:
+            data["party_gstin"] = f"URP - {data['party_aadhar']}"
+            
     output = io.BytesIO()
     total = generate_invoice(data, output)
+
     session['invoice_data'] = {
         "invoice_no": data["invoice_no"],
         "date": data["date"],
@@ -103,6 +131,8 @@ def download():
         "total_value": total,
     }
 
+    # Save to pending requests automatically if new party
+    
     output.seek(0)
     filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")

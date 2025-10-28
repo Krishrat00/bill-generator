@@ -12,7 +12,6 @@
 <body class="bg-light">
   <div class="container">
     <h3 class="text-center my-3">Create Bill</h3>
-
     <form id="billForm" class="bg-white p-3 rounded shadow-sm" action="/download" method="POST">
       <div class="mb-2">
         <label class="form-label">Invoice No</label>
@@ -33,14 +32,35 @@
           {% endfor %}
         </select>
       </div>
-      <label class="form-label">Party City</label>
-      <input type="text" id="party_place" name="ch_no" class="form-control mb-2" placeholder="Enter or search city"
-        required>
-      <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
 
       <div class="mb-2">
-        <label class="form-label">GSTIN</label>
-        <input type="text" id="party_gstin" name="gstin" class="form-control" placeholder="Enter GSTIN" required>
+        <label class="form-label">Party City</label>
+        <input type="text" id="party_place" name="place" class="form-control" placeholder="Enter or search city"
+          required>
+      </div>
+
+      <!-- GST / PAN / AADHAR Section -->
+      <div class="mb-2" id="id-section">
+        <label class="form-label">GSTIN / PAN / Aadhar</label>
+
+        <input type="text" id="gstin" name="gstin" class="form-control mb-2" placeholder="Enter GSTIN">
+
+        <div id="urp-fields" style="display:flex;gap:10px;">
+          <input type="text" id="pan" name="pan" class="form-control" placeholder="Enter PAN">
+          <input type="text" id="aadhar" name="aadhar" class="form-control" placeholder="Enter Aadhar">
+        </div>
+
+        <div id="id-choice" style="display:none;margin-top:8px;">
+          <label class="form-label me-2">Select ID for Billing:</label>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="id_type" id="use_pan" value="pan">
+            <label class="form-check-label" for="use_pan">PAN</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="id_type" id="use_aadhar" value="aadhar">
+            <label class="form-check-label" for="use_aadhar">Aadhar</label>
+          </div>
+        </div>
       </div>
 
       <div class="mb-2">
@@ -55,7 +75,8 @@
 
       <div class="mb-2">
         <label class="form-label">Transport GSTIN</label>
-        <input type="text" id="transport_gstin" class="form-control" placeholder="Enter GSTIN" required>
+        <input type="text" id="transport_gstin" class="form-control" name="transport_gstin" placeholder="Enter GSTIN"
+          required>
       </div>
 
       <h5 class="mt-3">Items</h5>
@@ -63,7 +84,7 @@
         <div class="row mb-1">
           <div class="col-12 col-md-3">
             <select name="item_name[]" class="form-select" required>
-              <option value="" disabled>Select Item</option>
+              <option value="" disabled selected>Select Item</option>
               <option value="CITRA">CITRA</option>
               <option value="COTTON">COTTON</option>
               <option value="HI CHOICE">HI CHOICE</option>
@@ -91,245 +112,16 @@
           </div>
         </div>
       </div>
+
       <button type="button" class="btn btn-outline-primary btn-sm mt-1" onclick="addItem()">+ Add Item</button>
       <button type="submit" class="btn btn-success w-100 mt-3">Download Bill PDF</button>
       <button id="generateEWB" class="btn btn-primary mt-2">Generate EWB</button>
-
     </form>
+
   </div>
-
-
   <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-  <script>
-    function addItem() {
-      const row = document.createElement("div");
-      row.className = "row mb-1";
-      row.innerHTML = `
-    <div class="col-12 col-md-3">
-      <select name="item_name[]" class="form-select" required>
-        <option value="" disabled>Select Item</option>
-        <option value="CITRA">CITRA</option>
-        <option value="COTTON">COTTON</option>
-        <option value="HI CHOICE">HI CHOICE</option>
-        <option value="KING COTTON">KING COTTON</option>
-        <option value="LINEN">LINEN</option>
-        <option value="MAGIC">MAGIC</option>
-        <option value="MANBHARI">MANBHARI</option>
-        <option value="PRINT">PRINT</option>
-        <option value="SAFARI">SAFARI</option>
-        <option value="SHRIMAN">SHRIMAN</option>
-      </select>
-    </div>
-    <div class="col-6 col-md-2"><input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required></div>
-    <div class="col-4 col-md-2">
-      <select name="unit[]" class="form-select" required>
-        <option value="Mtr">Mtr</option>
-        <option value="Pcs">Pcs</option>
-        <option value="Kgs">Kgs</option>
-      </select>
-    </div>    
-    <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`;
-      document.getElementById("items").appendChild(row);
-    }
-
-  </script>
-  <script>
-    function fetchPartyDetails() {
-      const name = $('#party_name').val();
-      if (!name) return;
-
-      fetch(`/get_party_details?name=${encodeURIComponent(name)}`)
-        .then(res => res.json())
-        .then(data => {
-          const placeInput = document.getElementById("party_place");
-          const gstInput = document.getElementById("party_gstin");
-          console.log("Party Data", data);
-          gstInput.value = data.gstin || "";
-          placeInput.value = data.place || "";
-          if (data.fixed_place) {
-            gstInput.readOnly = true;
-            gstInput.classList.add("bg-light");
-
-            placeInput.readOnly = true;   // ✅ fixed place: cannot edit
-            placeInput.classList.add("bg-light");
-          } else {
-            gstInput.readOnly = false;
-            gstInput.classList.remove("bg-light");
-
-            placeInput.readOnly = false;  // ✅ editable if not fixed
-            placeInput.classList.remove("bg-light");
-          }
-        });
-    }
-
-
-    function fetchTransportDetails() {
-      const name = $('#transport').val();
-      if (!name) return;
-      const gstInput = document.getElementById("transport_gstin");
-
-      fetch(`/get_transport_details?name=${encodeURIComponent(name)}`)
-        .then(res => res.json())
-        .then(data => {
-          gstInput.value = data.gstin || "";
-          if (data.gstin) {
-            gstInput.readOnly = true;
-            gstInput.classList.add("bg-light");
-          } else {
-            gstInput.readOnly = false;
-            gstInput.classList.remove("bg-light");
-          }
-        });
-    }
-    $(document).ready(function () {
-      // Party select2
-      $('#party_name').select2({ tags: true, width: '100%', placeholder: "Select or type party name" })
-        .on('change', fetchPartyDetails);
-
-      $('#transport').select2({ tags: true, width: '100%', placeholder: "Select or type transport name" })
-        .on('change', fetchTransportDetails);
-
-      // Form submit validation
-      // Form submit validation + pending request
-      $('#billForm').on('submit', async function (e) {
-        const partyName = $('#party_name').val().trim();
-        const partyPlace = $('#party_place').val().trim();
-        const partyGstin = $('#party_gstin').val().trim();
-        const transportName = $('#transport').val().trim();
-        const transportGstin = $('#transport_gstin').val().trim();
-
-        // Validate required fields
-        if (!partyName || !partyPlace || !partyGstin) {
-          alert("Please fill Party Name, Place and GSTIN before submitting.");
-          e.preventDefault();
-          return false;
-        }
-        if (transportName && !transportGstin) {
-          alert("Please enter Transport GSTIN.");
-          e.preventDefault();
-          return false;
-        }
-
-        // Send pending request for party if new
-        await fetch('/add_pending', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'party', name: partyName, gstin: partyGstin, place: partyPlace })
-        });
-
-        // Send pending request for transport if new and GSTIN filled
-        if (transportName && transportGstin) {
-          await fetch('/add_pending', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type: 'transport', name: transportName, gstin: transportGstin, place: "" })
-          });
-        }
-
-        // Form will now submit normally
-      });
-
-    });
-  </script>
-
-  <script>
-    const input = document.getElementById("party_place");
-    const suggestionBox = document.getElementById("citySuggestions");
-
-    input.addEventListener("input", async function () {
-      const query = this.value.trim();
-      if (query.length < 3) {
-        suggestionBox.style.display = "none";
-        return;
-      }
-
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`);
-      const data = await res.json();
-
-      suggestionBox.innerHTML = "";
-      data.forEach(place => {
-        const addr = place.address || {};
-        const city = addr.city || addr.town || addr.village || addr.county || place.display_name.split(",")[0];
-        const state = addr.state || "—";
-        const option = document.createElement("li");
-        option.className = "list-group-item list-group-item-action";
-        option.textContent = `${city} (${state})`;
-        option.onclick = () => {
-          input.value = option.textContent;
-          suggestionBox.style.display = "none";
-
-          // Save this city to your backend cache
-          fetch(`/save_city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}`)
-            .then(() => {
-              // Check if city already exists in dropdown
-              const select = document.getElementById("party_place");
-              const exists = Array.from(select.options).some(opt => opt.text === `${city} (${state})`);
-              if (!exists) {
-                const newOption = new Option(`${city} (${state})`, `${city} (${state})`);
-                select.add(newOption);
-              }
-            });
-        };
-        suggestionBox.appendChild(option);
-      });
-
-      suggestionBox.style.display = "block";
-    });
-
-    document.addEventListener("click", e => {
-      if (!suggestionBox.contains(e.target) && e.target !== input) {
-        suggestionBox.style.display = "none";
-      }
-    });
-
-
-  </script>
-  <script>
-    document.getElementById("generateEWB").addEventListener("click", (e) => {
-      e.preventDefault();
-      const form = document.getElementById("billForm");
-
-      // Collect invoice data to sessionStorage
-      const items = [];
-      const names = form.querySelectorAll("select[name='item_name[]']");
-      const qtys = form.querySelectorAll("input[name='qty[]']");
-      const rates = form.querySelectorAll("input[name='rate[]']");
-
-      let total_value = 0;
-      for (let i = 0; i < names.length; i++) {
-        if (names[i].value && qtys[i].value && rates[i].value) {
-          const itemTotal = parseFloat(qtys[i].value) * parseFloat(rates[i].value);
-          total_value += itemTotal;
-          items.push({
-            name: names[i].value,
-            qty: parseFloat(qtys[i].value),
-            rate: parseFloat(rates[i].value),
-            amount: itemTotal
-          });
-        }
-      }
-
-      // console.log(form.querySelector("input#transport_gstin").value);
-      // console.log("Hii")
-      // console.log(form.querySelector("input#party_place").value);
-      const invoiceData = {
-        invoice_no: form.querySelector("input[name='bill_no']").value,
-        date: form.querySelector("input[name='date']").value,
-        party_name: form.querySelector("select[name='customer_name']").value,
-        party_gstin: form.querySelector("input[name='gstin']").value,
-        transport: form.querySelector("select[name='transport']").value,
-        transport_gstin: form.querySelector("input#transport_gstin").value,
-        total_value: total_value.toFixed(2)
-      };
-
-      // Save to sessionStorage
-      sessionStorage.setItem("current_invoice", JSON.stringify(invoiceData));
-
-      // Redirect to message.html
-      window.location.href = "/message";
-    });
-  </script>
+  <script> function addItem() { const row = document.createElement("div"); row.className = "row mb-1"; row.innerHTML = ` <div class="col-12 col-md-3"> <select name="item_name[]" class="form-select" required> <option value="" disabled selected>Select Item</option> <option value="CITRA">CITRA</option> <option value="COTTON">COTTON</option> <option value="HI CHOICE">HI CHOICE</option> <option value="KING COTTON">KING COTTON</option> <option value="LINEN">LINEN</option> <option value="MAGIC">MAGIC</option> <option value="MANBHARI">MANBHARI</option> <option value="PRINT">PRINT</option> <option value="SAFARI">SAFARI</option> <option value="SHRIMAN">SHRIMAN</option> </select> </div> <div class="col-6 col-md-2"><input type="number" step="0.01" name="qty[]" class="form-control" placeholder="Qty" required></div> <div class="col-4 col-md-2"> <select name="unit[]" class="form-select" required> <option value="Mtr">Mtr</option> <option value="Pcs">Pcs</option> <option value="Kgs">Kgs</option> </select> </div> <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`; document.getElementById("items").appendChild(row); } $(document).ready(function () { $('#party_name').select2({ tags: true, width: '100%', placeholder: "Select or type party name" }).on('change', fetchPartyDetails); $('#transport').select2({ tags: true, width: '100%', placeholder: "Select or type transport name" }); }); async function fetchPartyDetails() { const name = document.getElementById("party_name").value; if (!name) return; const res = await fetch(`/get_party_details?name=${encodeURIComponent(name)}`); const data = await res.json(); const gstin = (data.gstin || "").trim(); const pan = (data.pan || "").trim(); const aadhar = (data.aadhar || "").trim(); const place = (data.place || "").trim(); document.getElementById("party_place").value = place || ""; const gstinField = document.getElementById("gstin"); const panField = document.getElementById("pan"); const aadharField = document.getElementById("aadhar"); const urpFields = document.getElementById("urp-fields"); const idChoice = document.getElementById("id-choice"); gstinField.value = ""; panField.value = ""; aadharField.value = ""; idChoice.style.display = "none"; if (gstin) { gstinField.value = gstin; gstinField.style.display = "block"; urpFields.style.display = "none"; } else { gstinField.style.display = "none"; urpFields.style.display = "flex"; if (pan && aadhar) { panField.value = pan; aadharField.value = aadhar; idChoice.style.display = "block"; } else if (pan) { panField.value = pan; aadharField.style.display = "none"; } else if (aadhar) { aadharField.value = aadhar; panField.style.display = "none"; } } } </script>
 </body>
 
 </html>
