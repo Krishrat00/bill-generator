@@ -212,7 +212,8 @@ def admin_delete():
 def format_gstin(gstin: str) -> str:
     """Format GSTIN by inserting spaces every 4 characters for readability."""
     gstin = gstin.replace(" ", "").upper()  # Remove existing spaces and normalize case
-    if identify_number_type(gstin) != "GST" and identify_number_type(gstin) != "INVALID":
+    print(identify_number_type(gstin))
+    if identify_number_type(gstin) == "GST" and identify_number_type(gstin) != "INVALID":
         return gstin  # Return as is if not a valid GSTIN
     else:
         return f"URP-{gstin}"
