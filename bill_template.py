@@ -88,11 +88,13 @@ def generate_invoice(data, filename="invoice_fixed.pdf"):
     while len(table_data) < 16:
         table_data.append(["", "", "", "", "", ""])
 
-    gst = total * 0.05
-    grand_total = total + gst
+    rounded_total = round(total)
+
+    gst = rounded_total * 0.05
+    grand_total = rounded_total + gst
 
     # Add totals as last 3 rows in the table
-    table_data.append(["", "", "", "", "Total", f"{total:.2f}"])
+    table_data.append(["", "", "", "", "Total", f"{rounded_total:.2f}"])
     table_data.append(["", "", "", "", "Add IGST @5%", f"{gst:.2f}"])
     table_data.append(["", "", "", "", "Grand Total", f"{grand_total:.2f}"])
 
