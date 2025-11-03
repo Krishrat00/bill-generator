@@ -59,6 +59,7 @@ def message_page():
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
+
     for field in ["bill_no","date","customer_name","ch_no","gstin","transport"]:
         if not form.get(field):
             return f"{field} is required", 400
@@ -75,9 +76,12 @@ def download():
         "place": form.get("ch_no", ""),
         "party_gstin": format_gstin(form.get("gstin", "")),
         "transport": form.get("transport", ""),
+        "transport_gstin": form.get("transport_gstin", ""),  # ✅ now included
         "units" : form.getlist('unit[]'),
         "items": []
     }
+
+    print(data)
 
     for name, qty, unit, rate in zip(
         form.getlist("item_name[]"),
@@ -132,19 +136,19 @@ def admin_pending():
     pending = data_manager.get_all_pending()
     return render_template("admin.html", pending=pending)
 
-@app.route("/admin/approve/<type_>/<name>")
+@app.route("/admin/approve/<type_>/<path:name>")
 def admin_approve(type_, name):
     if not session.get("admin"):
-        return redirect("/admin/login")
+        return jsonify({"error": "unauthorized"}), 401
     data_manager.approve_pending(type_, name)
-    return redirect("/admin/pending")
+    return jsonify({"status": "approved"})
 
-@app.route("/admin/reject/<type_>/<name>")
+@app.route("/admin/reject/<type_>/<path:name>")
 def admin_reject(type_, name):
     if not session.get("admin"):
         return redirect("/admin/login")
     data_manager.reject_pending(type_, name)
-    return redirect("/admin/pending")
+    return jsonify({"status": "rejected"})  # ✅ respond with JSON instead of redirect
 
 # --------------------------
 # ✅ ADMIN PANEL MANAGEMENT
