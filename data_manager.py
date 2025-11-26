@@ -1,194 +1,147 @@
-import sqlite3
-import os
-from contextlib import closing
+from db import get_collection
+from pymongo import ASCENDING
+from bson.objectid import ObjectId
 
 class DatabaseManager:
-    def __init__(self, db_path="data/data.db"):
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.db_path = db_path
-        self._create_tables()
+    def __init__(self):
+        self.parties   = get_collection("parties")
+        self.transports = get_collection("transports")
+        self.cities    = get_collection("cities")
+        self.pending   = get_collection("pending_requests")
 
-    # ---------- Connection Helper ----------
-    def _connect(self):
-        return sqlite3.connect(self.db_path, check_same_thread=False)
+        self._create_indexes()
 
-    # ---------- Table Creation ----------
-    def _create_tables(self):
-        with closing(self._connect()) as conn:
-            cur = conn.cursor()
+    # ------------------ Indexes ------------------
+    def _create_indexes(self):
+        self.parties.create_index([("name", ASCENDING)], unique=True)
+        self.transports.create_index([("name", ASCENDING)], unique=True)
+        self.cities.create_index(
+            [("city", ASCENDING), ("state", ASCENDING)], unique=True
+        )
+        self.pending.create_index(
+            [("type", ASCENDING), ("name", ASCENDING)], unique=True
+        )
 
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS parties (
-                name TEXT PRIMARY KEY,
-                gstin TEXT,
-                place TEXT,
-                fixed_place INTEGER DEFAULT 0
-            )
-            """)
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS transports (
-                name TEXT PRIMARY KEY,
-                gstin TEXT
-            )
-            """)
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS cities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                city TEXT,
-                state TEXT
-            )
-            """)
-
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS pending_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                type TEXT,
-                name TEXT,
-                gstin TEXT,
-                place TEXT
-            )
-            """)
-
-            conn.commit()
-
-    # ---------- Normalization ----------
+    # ------------------ Helpers ------------------
     def _norm(self, name):
         return name.strip().upper() if isinstance(name, str) else ""
 
-    # ---------- Party Methods ----------
+    # ------------------ Parties ------------------
     def add_party(self, name, gstin="", place="", fixed_place=False):
         if not name:
             return False
-        with closing(self._connect()) as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO parties (name, gstin, place, fixed_place)
-                VALUES (?, ?, ?, ?)
-            """, (name.strip(), gstin.strip(), place.strip(), int(fixed_place)))
-            conn.commit()
+
+        self.parties.update_one(
+            {"name": name.strip()},
+            {
+                "$set": {
+                    "gstin": gstin.strip(),
+                    "place": place.strip(),
+                    "fixed_place": bool(fixed_place)
+                }
+            },
+            upsert=True
+        )
         return True
 
     def get_party(self, name):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name, gstin, place, fixed_place FROM parties WHERE name = ?", (name,))
-            row = cur.fetchone()
-        if not row: return {}
-        return {"name": row[0], "gstin": row[1], "place": row[2], "fixed_place": bool(row[3])}
+        row = self.parties.find_one({"name": name})
+        if not row:
+            return {}
+
+        return {
+            "name": row["name"],
+            "gstin": row.get("gstin", ""),
+            "place": row.get("place", ""),
+            "fixed_place": row.get("fixed_place", False)
+        }
 
     def get_all_parties(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name FROM parties ORDER BY name COLLATE NOCASE")
-            return [r[0] for r in cur.fetchall()]
+        return sorted([p["name"] for p in self.parties.find({}, {"name": 1})])
 
-    # ---------- Transport Methods ----------
+    # ------------------ Transports ------------------
     def add_transport(self, name, gstin=""):
         if not name:
             return False
-        with closing(self._connect()) as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO transports (name, gstin)
-                VALUES (?, ?)
-            """, (name.strip(), gstin.strip()))
-            conn.commit()
+
+        self.transports.update_one(
+            {"name": name.strip()},
+            {"$set": {"gstin": gstin.strip()}},
+            upsert=True
+        )
         return True
 
     def get_transport(self, name):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name, gstin FROM transports WHERE name = ?", (name,))
-            row = cur.fetchone()
-        if not row: return {}
-        return {"name": row[0], "gstin": row[1]}
+        row = self.transports.find_one({"name": name})
+        if not row:
+            return {}
+        return {"name": row["name"], "gstin": row.get("gstin", "")}
 
     def get_all_transports(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name FROM transports ORDER BY name COLLATE NOCASE")
-            return [r[0] for r in cur.fetchall()]
+        return sorted([t["name"] for t in self.transports.find({}, {"name": 1})])
 
-    # ---------- City Methods ----------
+    # ------------------ Cities ------------------
     def add_city(self, city, state):
         if not city or not state:
             return False
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT id FROM cities WHERE lower(city)=lower(?) AND lower(state)=lower(?)", (city, state))
-            if cur.fetchone() is None:
-                conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)", (city, state))
-                conn.commit()
+
+        self.cities.update_one(
+            {"city": city.strip(), "state": state.strip()},
+            {"$setOnInsert": {"city": city.strip(), "state": state.strip()}},
+            upsert=True
+        )
         return True
 
     def get_all_cities(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT city, state FROM cities")
-            result = []
-            for c, s in cur.fetchall():
-                abbrev = "".join([w[0].upper() + "." for w in s.split()])
-                result.append(f"{c} ({abbrev})")
+        cities = list(self.cities.find({}, {"city": 1, "state": 1}))
+        result = []
+        for c in cities:
+            abbrev = "".join([w[0].upper() + "." for w in c["state"].split()])
+            result.append(f"{c['city']} ({abbrev})")
         return sorted(result)
 
-    # ---------- Pending Requests ----------
+    # ------------------ Pending Requests ------------------
     def add_pending(self, type_, name, gstin="", place=""):
-        with closing(self._connect()) as conn:
+        if not name:
+            return False
 
-            key_norm = name.strip().upper()
-            if not key_norm:
-                return False
+        key = name.strip()
 
-            # --- Check if already exists in party or transport tables ---
-            if type_ == "party":
-                existing = conn.execute("SELECT 1 FROM parties WHERE UPPER(name)=?", (key_norm,)).fetchone()
-            elif type_ == "transport":
-                existing = conn.execute("SELECT 1 FROM transports WHERE UPPER(name)=?", (key_norm,)).fetchone()
-            else:
-                return False
+        # Already exists in main table?
+        if type_ == "party" and self.parties.find_one({"name": key}):
+            return False
+        if type_ == "transport" and self.transports.find_one({"name": key}):
+            return False
 
-            if existing:
-                # Already exists — skip adding to pending
-                return False
+        # Already pending?
+        if self.pending.find_one({"type": type_, "name": key}):
+            return False
 
-            # --- Check if already pending ---
-            pending = conn.execute(
-                "SELECT 1 FROM pending_requests WHERE type=? AND UPPER(name)=?",
-                (type_, key_norm)
-            ).fetchone()
-
-            if pending:
-                # Already pending — skip again
-                return False
-
-            # --- Add new pending request ---
-            conn.execute(
-                """
-                INSERT INTO pending_requests (type, name, gstin, place)
-                VALUES (?, ?, ?, ?)
-                """,
-                (type_, name.strip(), gstin.strip(), place.strip() if type_ == "party" else "")
-            )
-            conn.commit()
-            return True
-
+        self.pending.insert_one({
+            "type": type_,
+            "name": key,
+            "gstin": gstin.strip(),
+            "place": place.strip() if type_ == "party" else ""
+        })
+        return True
 
     def get_all_pending(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT type, name, gstin, place FROM pending_requests ORDER BY id DESC")
-            return [{"type": t, "name": n, "gstin": g, "place": p} for t, n, g, p in cur.fetchall()]
+        return list(self.pending.find({}, {"_id": 0}).sort("_id", -1))
 
     def approve_pending(self, type_, name):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT gstin, place FROM pending_requests WHERE type=? AND name=?", (type_, name))
-            row = cur.fetchone()
-            if not row:
-                return False
-            gstin, place = row
-            if type_ == "party":
-                self.add_party(name, gstin, place)
-            else:
-                self.add_transport(name, gstin)
-            conn.execute("DELETE FROM pending_requests WHERE type=? AND name=?", (type_, name))
-            conn.commit()
+        key = name.strip()
+        row = self.pending.find_one({"type": type_, "name": key})
+        if not row:
+            return False
+
+        if type_ == "party":
+            self.add_party(key, row.get("gstin", ""), row.get("place", ""))
+        else:
+            self.add_transport(key, row.get("gstin", ""))
+
+        self.pending.delete_one({"type": type_, "name": key})
         return True
 
     def reject_pending(self, type_, name):
-        with closing(self._connect()) as conn:
-            conn.execute("DELETE FROM pending_requests WHERE type=? AND name=?", (type_, name))
-            conn.commit()
+        self.pending.delete_one({"type": type_, "name": name.strip()})
         return True

@@ -4,3 +4,5 @@ _pycache_/*
 *._pycache_*/
 *.cpython*
 *.pdf
+data/data.db
+*.env
