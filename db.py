@@ -1,12 +1,13 @@
 from pymongo import MongoClient
-from urllib.parse import quote_plus
 import os
+from dotenv import load_dotenv
 
+load_dotenv()
 # Read from environment safely
-MONGO_USER = quote_plus(os.getenv("MONGO_USER", "ac_db_user"))
-MONGO_PASS = quote_plus(os.getenv("MONGO_PASS", "a3_db"))
-MONGO_HOST = os.getenv("MONGO_HOST", "bill-cluster0.urojeoa.mongodb.net")
-MONGO_DB   = os.getenv("MONGO_DB", "")
+MONGO_USER = os.getenv("MONGO_USER")
+MONGO_PASS = os.getenv("MONGO_PASS")
+MONGO_HOST = os.getenv("MONGO_HOST")
+MONGO_DB = os.getenv("MONGO_DB")
 
 MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/?appName=bill-cluster0"
 MONGO_DB= MONGO_DB if MONGO_DB else "bill_app"
