@@ -8,8 +8,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
 data_manager = DatabaseManager()
 
-ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "password")
+ADMIN_USER = os.environ.get("ADMIN_USER")
+ADMIN_PASS = os.environ.get("ADMIN_PASS")
 
 # ---------- Routes ----------
 @app.route("/")
@@ -154,8 +154,14 @@ def admin_reject(type_, name):
 # ✅ ADMIN PANEL MANAGEMENT
 # --------------------------
 from flask import jsonify, request
-from db import get_db
-conn = get_db()
+from bson.objectid import ObjectId, InvalidId
+from db import get_collection
+
+def serialize(doc):
+    doc["id"] = str(doc["_id"])
+    del doc["_id"]
+    return doc
+
 @app.route("/admin")
 def admin_home():
     return render_template("admin.html")
@@ -164,12 +170,16 @@ def admin_home():
 @app.route("/admin/data")
 def admin_data():
     table = request.args.get("table")
-    allowed = ["parties", "transports", "cities", "pending_requests","bank_details"]
-    if table not in allowed:
+
+    if table not in ["parties", "transports", "cities", "pending_requests", "bank_details"]:
         return jsonify({"error": "Invalid table"}), 400
-    
-    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-    return jsonify([dict(r) for r in rows])
+
+    docs = list(get_collection(table).find({}))
+    docs = [serialize(d) for d in docs]  # convert _id → id
+
+    return jsonify(docs)
+
+
 
 
 @app.route("/admin/add", methods=["POST"])
@@ -177,41 +187,43 @@ def admin_add():
     data = request.json
     table = data.get("table")
 
-    if table == "parties":
-        conn.execute("INSERT INTO parties (name, gstin, place, fixed_place) VALUES (?, ?, ?, ?)",
-                        (data["name"], data["gstin"], data["place"], data.get("fixed_place", 0)))
-    elif table == "transports":
-        conn.execute("INSERT INTO transports (name, gstin) VALUES (?, ?)",
-                        (data["name"], data["gstin"]))
-    elif table == "cities":
-        conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)",
-                        (data["city"], data["state"]))
-    elif table == "pending_requests":
-        conn.execute("INSERT INTO pending_requests (type, name, gstin, place) VALUES (?, ?, ?, ?)",
-                        (data["type"], data["name"], data["gstin"], data.get("place", "")))
-    elif table == "bank_details":
-        conn.execute("INSERT INTO bank_details (bank_name, account_number, ifsc) VALUES (?, ?, ?)",
-                        (data["bank_name"], data["account_number"], data["ifsc"]))
-    else:
+    allowed = ["parties", "transports", "cities", "pending_requests", "bank_details"]
+    if table not in allowed:
         return jsonify({"error": "Invalid table"}), 400
 
-    conn.commit()
+    get_collection(table).insert_one(data)
     return jsonify({"status": "ok"})
+
 
 
 @app.route("/admin/delete", methods=["POST"])
 def admin_delete():
     data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
     table = data.get("table")
     record_id = data.get("id")
 
-    allowed = ["parties", "transports", "cities", "pending_requests"]
-    if table not in allowed:
+    # ✅ Allowed tables
+    ALLOWED_TABLES = ["parties", "transports", "cities", "pending_requests", "bank_details"]
+    if table not in ALLOWED_TABLES:
         return jsonify({"error": "Invalid table"}), 400
-    
-    conn.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
-    conn.commit()
+
+    # ✅ Validate record_id
+    try:
+        obj_id = ObjectId(record_id)
+    except (InvalidId, TypeError):
+        return jsonify({"error": "Invalid record id"}), 400
+
+    # ✅ Delete record
+    result = get_collection(table).delete_one({"_id": obj_id})
+
+    if result.deleted_count == 0:
+        return jsonify({"error": "Record not found"}), 404
+
     return jsonify({"status": "deleted"})
+
 
 def format_gstin(gstin: str) -> str:
     """Format GSTIN by inserting spaces every 4 characters for readability."""

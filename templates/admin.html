@@ -144,7 +144,7 @@
                 let rowHTML = '<tr>';
                 keys.forEach(k => rowHTML += `<td>${row[k]}</td>`);
                 rowHTML += `<td>
-                    <button class="delete-btn" onclick="deleteRecord('${table}', ${row.id})">Delete</button>
+                    <button class="delete-btn" onclick="deleteRecord('${table}', '${row.id}')">Delete</button>
                 </td>`;
                 if (table === 'pending_requests') {
                     rowHTML += `<td>

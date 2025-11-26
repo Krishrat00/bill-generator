@@ -5,7 +5,7 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.units import mm
 from num2words import num2words  # pip install num2words
-from db import get_db
+from db import get_collection
 
 def sanitize_string(s):
     """
@@ -22,13 +22,8 @@ def sanitize_string(s):
     return s
 
 def get_bank_details():
-    """Fetch all bank details from the database."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT bank_name, account_number, ifsc FROM bank_details")
-    banks = cursor.fetchall()
-    conn.close()
-    return banks
+    col = get_collection("bank_details")  # ← pass the name here
+    return list(col.find({}, {"_id": 0}))
 
 def generate_invoice(data, filename="invoice_fixed.pdf"):
     c = canvas.Canvas(filename, pagesize=A4)
