@@ -8,3 +8,4 @@ pytesseract
 webdriver-manager
 tabulate
 python-dotenv
+pymongo
