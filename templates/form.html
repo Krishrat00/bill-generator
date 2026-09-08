@@ -41,6 +41,7 @@
         <div class="col-md-4">
           <label class="form-label">PIN Code</label>
           <input type="text" id="party_pincode" name="pincode" class="form-control" placeholder="6-digit PIN" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required>
+          <div id="locationHint" class="form-text" aria-live="polite"></div>
         </div>
       </div>
       <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
@@ -217,25 +218,38 @@
 
       async function fillPlaceFromPincode() {
         const pincodeInput = document.getElementById("party_pincode");
+        const placeInput = document.getElementById("party_place");
         const pincode = pincodeInput.value.replace(/\D/g, "").slice(0, 6);
         pincodeInput.value = pincode;
+        if (!pincode) {
+          placeInput.value = "";
+          return;
+        }
         if (pincode.length !== 6) return;
 
         const res = await fetch(`/lookup_pincode?pincode=${encodeURIComponent(pincode)}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.place) document.getElementById("party_place").value = data.place;
+        if (data.place) placeInput.value = data.place;
       }
 
       async function fillPincodeFromPlace() {
         const place = document.getElementById("party_place").value.trim();
         const pincodeInput = document.getElementById("party_pincode");
+        const locationHint = document.getElementById("locationHint");
+        locationHint.textContent = "";
         if (place.length < 3 || pincodeInput.value) return;
 
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(place)}&format=json&addressdetails=1&limit=1`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(place)}&format=json&addressdetails=1&limit=5`);
         const data = await res.json();
-        const pincode = data[0]?.address?.postcode?.replace(/\D/g, "").slice(0, 6) || "";
-        if (pincode) pincodeInput.value = pincode;
+        const pincodes = [...new Set(data
+          .map(result => result.address?.postcode?.replace(/\D/g, "").slice(0, 6))
+          .filter(pincode => /^\d{6}$/.test(pincode)))];
+        if (pincodes.length === 1) {
+          pincodeInput.value = pincodes[0];
+        } else if (pincodes.length > 1) {
+          locationHint.textContent = "Multiple PIN codes found. Please enter the exact PIN code.";
+        }
       }
 
     $(document).ready(function () {
@@ -247,7 +261,13 @@
         .on('change', fetchTransportDetails);
 
       document.getElementById("party_pincode").addEventListener("change", fillPlaceFromPincode);
+      document.getElementById("party_pincode").addEventListener("input", function () {
+        if (!this.value.trim()) document.getElementById("party_place").value = "";
+      });
       document.getElementById("party_place").addEventListener("blur", fillPincodeFromPlace);
+      document.getElementById("party_place").addEventListener("input", function () {
+        if (!this.value.trim()) document.getElementById("party_pincode").value = "";
+      });
 
       // Form submit validation
       // Form submit validation + pending request
