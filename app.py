@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, jsonify, send_file, session, 
 import io, os
 from datetime import datetime
 from bill_template import generate_invoice
-from data_manager import DatabaseManager
+from data_manager import DatabaseManager, normalize_gstin, normalize_pincode, normalize_text
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
@@ -36,9 +36,10 @@ def get_transport_details():
 
 @app.route("/save_city")
 def save_city():
-    city = request.args.get("city", "")
-    state = request.args.get("state", "")
-    data_manager.add_city(city, state)
+    city = normalize_text(request.args.get("city", ""))
+    state = normalize_text(request.args.get("state", ""))
+    pincode = normalize_pincode(request.args.get("pincode", ""))
+    data_manager.add_city(city, state, pincode)
     return jsonify({"status": "ok"})
 
 @app.route("/add_pending", methods=["POST"])
@@ -48,7 +49,8 @@ def add_pending():
         type_=data["type"],
         name=data["name"],
         gstin=data.get("gstin", ""),
-        place=data.get("place", "")
+        place=data.get("place", ""),
+        pincode=data.get("pincode", "")
     )
     return jsonify({"status": "ok"})
 
@@ -59,9 +61,11 @@ def message_page():
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
-    for field in ["bill_no","date","customer_name","ch_no","gstin","transport"]:
+    for field in ["bill_no","date","customer_name","ch_no","gstin","pincode","transport"]:
         if not form.get(field):
             return f"{field} is required", 400
+    if len(normalize_pincode(form.get("pincode", ""))) != 6:
+        return "pincode must be 6 digits", 400
 
     try:
         formatted_date = datetime.strptime(form.get("date", ""), "%Y-%m-%d").strftime("%d/%m/%Y")
@@ -71,10 +75,11 @@ def download():
     data = {
         "invoice_no": form.get("bill_no", ""),
         "date": formatted_date,
-        "party_name": form.get("customer_name", ""),
-        "place": form.get("ch_no", ""),
-        "party_gstin": form.get("gstin", ""),
-        "transport": form.get("transport", ""),
+        "party_name": normalize_text(form.get("customer_name", "")),
+        "place": normalize_text(form.get("ch_no", "")),
+        "pincode": normalize_pincode(form.get("pincode", "")),
+        "party_gstin": normalize_gstin(form.get("gstin", "")),
+        "transport": normalize_text(form.get("transport", "")),
         "units" : form.getlist('unit[]'),
         "items": []
     }
@@ -100,6 +105,7 @@ def download():
         "date": data["date"],
         "party_gstin": data["party_gstin"],
         "place": data["place"],
+        "pin": data["pincode"],
         "total_value": total,
     }
 
@@ -174,17 +180,17 @@ def admin_add():
     table = data.get("table")
 
     if table == "parties":
-        conn.execute("INSERT INTO parties (name, gstin, place, fixed_place) VALUES (?, ?, ?, ?)",
-                        (data["name"], data["gstin"], data["place"], data.get("fixed_place", 0)))
+        conn.execute("INSERT INTO parties (name, gstin, place, pincode, fixed_place) VALUES (?, ?, ?, ?, ?)",
+                        (normalize_text(data["name"]), normalize_gstin(data["gstin"]), normalize_text(data["place"]), normalize_pincode(data.get("pincode", "")), data.get("fixed_place", 0)))
     elif table == "transports":
         conn.execute("INSERT INTO transports (name, gstin) VALUES (?, ?)",
-                        (data["name"], data["gstin"]))
+                        (normalize_text(data["name"]), normalize_gstin(data["gstin"])))
     elif table == "cities":
         conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)",
-                        (data["city"], data["state"]))
+                        (normalize_text(data["city"]), normalize_text(data["state"]), normalize_pincode(data.get("pincode", ""))))
     elif table == "pending_requests":
-        conn.execute("INSERT INTO pending_requests (type, name, gstin, place) VALUES (?, ?, ?, ?)",
-                        (data["type"], data["name"], data["gstin"], data.get("place", "")))
+        conn.execute("INSERT INTO pending_requests (type, name, gstin, place, pincode) VALUES (?, ?, ?, ?, ?)",
+                (data["type"], normalize_text(data["name"]), normalize_gstin(data["gstin"]), normalize_text(data.get("place", "")), normalize_pincode(data.get("pincode", ""))))
     elif table == "bank_details":
         conn.execute("INSERT INTO bank_details (bank_name, account_number, ifsc) VALUES (?, ?, ?)",
                         (data["bank_name"], data["account_number"], data["ifsc"]))
