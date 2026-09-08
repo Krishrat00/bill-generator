@@ -1,9 +1,18 @@
-# db.py
-import sqlite3
+from pymongo import MongoClient
+import os
+from dotenv import load_dotenv
 
-DB_PATH = "data/data.db"  # adjust path if different
+load_dotenv()
+# Read from environment safely
+MONGO_USER = os.getenv("MONGO_USER")
+MONGO_PASS = os.getenv("MONGO_PASS")
+MONGO_HOST = os.getenv("MONGO_HOST")
+MONGO_DB = os.getenv("MONGO_DB")
 
-def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+MONGO_URI = f"mongodb+srv://{MONGO_USER}:{MONGO_PASS}@{MONGO_HOST}/?appName=bill-cluster0"
+MONGO_DB= MONGO_DB if MONGO_DB else "bill_app"
+client = MongoClient(MONGO_URI)
+db = client[MONGO_DB]   # Use this everywhere
+
+def get_collection(name: str):
+    return db[name]

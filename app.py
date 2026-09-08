@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
-import io, os
+import io, os, re
 from datetime import datetime
 from bill_template import generate_invoice
 from data_manager import DatabaseManager, normalize_gstin, normalize_pincode, normalize_text
@@ -8,8 +8,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
 data_manager = DatabaseManager()
 
-ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
-ADMIN_PASS = os.environ.get("ADMIN_PASS", "password")
+ADMIN_USER = os.environ.get("ADMIN_USER")
+ADMIN_PASS = os.environ.get("ADMIN_PASS")
 
 # ---------- Routes ----------
 @app.route("/")
@@ -84,6 +84,8 @@ def download():
         "items": []
     }
 
+    print(data)
+
     for name, qty, unit, rate in zip(
         form.getlist("item_name[]"),
         form.getlist("qty[]"),
@@ -138,26 +140,32 @@ def admin_pending():
     pending = data_manager.get_all_pending()
     return render_template("admin.html", pending=pending)
 
-@app.route("/admin/approve/<type_>/<name>")
+@app.route("/admin/approve/<type_>/<path:name>")
 def admin_approve(type_, name):
     if not session.get("admin"):
-        return redirect("/admin/login")
+        return jsonify({"error": "unauthorized"}), 401
     data_manager.approve_pending(type_, name)
-    return redirect("/admin/pending")
+    return jsonify({"status": "approved"})
 
-@app.route("/admin/reject/<type_>/<name>")
+@app.route("/admin/reject/<type_>/<path:name>")
 def admin_reject(type_, name):
     if not session.get("admin"):
         return redirect("/admin/login")
     data_manager.reject_pending(type_, name)
-    return redirect("/admin/pending")
+    return jsonify({"status": "rejected"})  # ✅ respond with JSON instead of redirect
 
 # --------------------------
 # ✅ ADMIN PANEL MANAGEMENT
 # --------------------------
 from flask import jsonify, request
-from db import get_db
-conn = get_db()
+from bson.objectid import ObjectId, InvalidId
+from db import get_collection
+
+def serialize(doc):
+    doc["id"] = str(doc["_id"])
+    del doc["_id"]
+    return doc
+
 @app.route("/admin")
 def admin_home():
     return render_template("admin.html")
@@ -166,12 +174,16 @@ def admin_home():
 @app.route("/admin/data")
 def admin_data():
     table = request.args.get("table")
-    allowed = ["parties", "transports", "cities", "pending_requests","bank_details"]
-    if table not in allowed:
+
+    if table not in ["parties", "transports", "cities", "pending_requests", "bank_details"]:
         return jsonify({"error": "Invalid table"}), 400
-    
-    rows = conn.execute(f"SELECT * FROM {table}").fetchall()
-    return jsonify([dict(r) for r in rows])
+
+    docs = list(get_collection(table).find({}))
+    docs = [serialize(d) for d in docs]  # convert _id → id
+
+    return jsonify(docs)
+
+
 
 
 @app.route("/admin/add", methods=["POST"])
@@ -197,24 +209,75 @@ def admin_add():
     else:
         return jsonify({"error": "Invalid table"}), 400
 
-    conn.commit()
+    get_collection(table).insert_one(data)
     return jsonify({"status": "ok"})
+
 
 
 @app.route("/admin/delete", methods=["POST"])
 def admin_delete():
     data = request.json
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
     table = data.get("table")
     record_id = data.get("id")
 
-    allowed = ["parties", "transports", "cities", "pending_requests"]
-    if table not in allowed:
+    # ✅ Allowed tables
+    ALLOWED_TABLES = ["parties", "transports", "cities", "pending_requests", "bank_details"]
+    if table not in ALLOWED_TABLES:
         return jsonify({"error": "Invalid table"}), 400
-    
-    conn.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
-    conn.commit()
+
+    # ✅ Validate record_id
+    try:
+        obj_id = ObjectId(record_id)
+    except (InvalidId, TypeError):
+        return jsonify({"error": "Invalid record id"}), 400
+
+    # ✅ Delete record
+    result = get_collection(table).delete_one({"_id": obj_id})
+
+    if result.deleted_count == 0:
+        return jsonify({"error": "Record not found"}), 404
+
     return jsonify({"status": "deleted"})
 
+
+def format_gstin(gstin: str) -> str:
+    """Format GSTIN by inserting spaces every 4 characters for readability."""
+    gstin = gstin.replace(" ", "").upper()  # Remove existing spaces and normalize case
+    print(identify_number_type(gstin))
+    if identify_number_type(gstin) == "GST" and identify_number_type(gstin) != "INVALID":
+        return gstin  # Return as is if not a valid GSTIN
+    else:
+        return f"URP-{gstin}"
+    
+
+def identify_number_type(number: str) -> str:
+    """
+    Identify whether the input is a GST number, PAN number, or Aadhaar number.
+    Returns one of: 'GST', 'PAN', 'AADHAAR', or 'INVALID'
+    """
+
+    number = number.strip().upper()  # Normalize input
+    
+    # GSTIN format: 15 characters -> 2 digits, 10 chars (PAN), 1 char, Z, 1 checksum
+    gst_pattern = re.compile(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$')
+    
+    # PAN format: 10 characters -> 5 letters, 4 digits, 1 letter
+    pan_pattern = re.compile(r'^[A-Z]{5}[0-9]{4}[A-Z]{1}$')
+    
+    # Aadhaar format: 12 digits (may contain spaces)
+    aadhaar_pattern = re.compile(r'^[0-9]{12}$')
+    
+    if gst_pattern.match(number):
+        return "GST"
+    elif pan_pattern.match(number):
+        return "PAN"
+    elif aadhaar_pattern.match(number):
+        return "AADHAAR"
+    else:
+        return "INVALID"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5091))

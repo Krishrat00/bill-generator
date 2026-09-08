@@ -111,11 +111,9 @@ class DatabaseManager:
         return {"name": row[0], "gstin": row[1], "place": row[2], "pincode": row[3], "fixed_place": bool(row[4])}
 
     def get_all_parties(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name FROM parties ORDER BY name COLLATE NOCASE")
-            return [r[0] for r in cur.fetchall()]
+        return sorted([p["name"] for p in self.parties.find({}, {"name": 1})])
 
-    # ---------- Transport Methods ----------
+    # ------------------ Transports ------------------
     def add_transport(self, name, gstin=""):
         name = normalize_text(name)
         if not name:
@@ -137,9 +135,7 @@ class DatabaseManager:
         return {"name": row[0], "gstin": row[1]}
 
     def get_all_transports(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT name FROM transports ORDER BY name COLLATE NOCASE")
-            return [r[0] for r in cur.fetchall()]
+        return sorted([t["name"] for t in self.transports.find({}, {"name": 1})])
 
     # ---------- City Methods ----------
     def add_city(self, city, state, pincode=""):
@@ -156,12 +152,11 @@ class DatabaseManager:
         return True
 
     def get_all_cities(self):
-        with closing(self._connect()) as conn:
-            cur = conn.execute("SELECT city, state FROM cities")
-            result = []
-            for c, s in cur.fetchall():
-                abbrev = "".join([w[0].upper() + "." for w in s.split()])
-                result.append(f"{c} ({abbrev})")
+        cities = list(self.cities.find({}, {"city": 1, "state": 1}))
+        result = []
+        for c in cities:
+            abbrev = "".join([w[0].upper() + "." for w in c["state"].split()])
+            result.append(f"{c['city']} ({abbrev})")
         return sorted(result)
 
     # ---------- Pending Requests ----------
@@ -230,7 +225,5 @@ class DatabaseManager:
         return True
 
     def reject_pending(self, type_, name):
-        with closing(self._connect()) as conn:
-            conn.execute("DELETE FROM pending_requests WHERE type=? AND name=?", (type_, name))
-            conn.commit()
+        self.pending.delete_one({"type": type_, "name": name.strip()})
         return True
