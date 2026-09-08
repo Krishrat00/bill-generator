@@ -1,8 +1,10 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
-import io, os, re
+import io, json, os, re
 from datetime import datetime
+from urllib.request import urlopen
 from bill_template import generate_invoice
 from data_manager import DatabaseManager, normalize_gstin, normalize_pincode, normalize_text
+from db import DB_BACKEND, get_collection
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecret")
@@ -41,6 +43,24 @@ def save_city():
     pincode = normalize_pincode(request.args.get("pincode", ""))
     data_manager.add_city(city, state, pincode)
     return jsonify({"status": "ok"})
+
+@app.route("/lookup_pincode")
+def lookup_pincode():
+    pincode = normalize_pincode(request.args.get("pincode", ""))
+    if len(pincode) != 6:
+        return jsonify({"place": "", "pincode": pincode}), 400
+    try:
+        with urlopen(f"https://api.postalpincode.in/pincode/{pincode}", timeout=8) as response:
+            result = json.load(response)
+    except Exception:
+        return jsonify({"place": "", "pincode": pincode}), 502
+    if not result or result[0].get("Status") != "Success" or not result[0].get("PostOffice"):
+        return jsonify({"place": "", "pincode": pincode}), 404
+    office = result[0]["PostOffice"][0]
+    district = normalize_text(office.get("District", ""))
+    state = normalize_text(office.get("State", ""))
+    place = f"{district} ({state})" if district and state else district or state
+    return jsonify({"place": place, "pincode": pincode})
 
 @app.route("/add_pending", methods=["POST"])
 def add_pending():
@@ -159,11 +179,12 @@ def admin_reject(type_, name):
 # --------------------------
 from flask import jsonify, request
 from bson.objectid import ObjectId, InvalidId
-from db import get_collection
 
 def serialize(doc):
-    doc["id"] = str(doc["_id"])
-    del doc["_id"]
+    if "_id" in doc:
+        doc["id"] = str(doc.pop("_id"))
+    elif "id" in doc:
+        doc["id"] = str(doc["id"])
     return doc
 
 @app.route("/admin")
@@ -190,26 +211,20 @@ def admin_data():
 def admin_add():
     data = request.json
     table = data.get("table")
-
     if table == "parties":
-        conn.execute("INSERT INTO parties (name, gstin, place, pincode, fixed_place) VALUES (?, ?, ?, ?, ?)",
-                        (normalize_text(data["name"]), normalize_gstin(data["gstin"]), normalize_text(data["place"]), normalize_pincode(data.get("pincode", "")), data.get("fixed_place", 0)))
+        document = {"name": normalize_text(data["name"]), "gstin": normalize_gstin(data["gstin"]), "place": normalize_text(data["place"]), "pincode": normalize_pincode(data.get("pincode", "")), "fixed_place": bool(data.get("fixed_place", 0))}
     elif table == "transports":
-        conn.execute("INSERT INTO transports (name, gstin) VALUES (?, ?)",
-                        (normalize_text(data["name"]), normalize_gstin(data["gstin"])))
+        document = {"name": normalize_text(data["name"]), "gstin": normalize_gstin(data["gstin"])}
     elif table == "cities":
-        conn.execute("INSERT INTO cities (city, state) VALUES (?, ?)",
-                        (normalize_text(data["city"]), normalize_text(data["state"]), normalize_pincode(data.get("pincode", ""))))
+        document = {"city": normalize_text(data["city"]), "state": normalize_text(data["state"]), "pincode": normalize_pincode(data.get("pincode", ""))}
     elif table == "pending_requests":
-        conn.execute("INSERT INTO pending_requests (type, name, gstin, place, pincode) VALUES (?, ?, ?, ?, ?)",
-                (data["type"], normalize_text(data["name"]), normalize_gstin(data["gstin"]), normalize_text(data.get("place", "")), normalize_pincode(data.get("pincode", ""))))
+        document = {"type": data["type"], "name": normalize_text(data["name"]), "gstin": normalize_gstin(data["gstin"]), "place": normalize_text(data.get("place", "")), "pincode": normalize_pincode(data.get("pincode", ""))}
     elif table == "bank_details":
-        conn.execute("INSERT INTO bank_details (bank_name, account_number, ifsc) VALUES (?, ?, ?)",
-                        (data["bank_name"], data["account_number"], data["ifsc"]))
+        document = {"bank_name": data["bank_name"], "account_number": data["account_number"], "ifsc": data["ifsc"]}
     else:
         return jsonify({"error": "Invalid table"}), 400
 
-    get_collection(table).insert_one(data)
+    result = get_collection(table).insert_one(document)
     return jsonify({"status": "ok"})
 
 
@@ -229,13 +244,14 @@ def admin_delete():
         return jsonify({"error": "Invalid table"}), 400
 
     # ✅ Validate record_id
-    try:
-        obj_id = ObjectId(record_id)
-    except (InvalidId, TypeError):
-        return jsonify({"error": "Invalid record id"}), 400
+    if DB_BACKEND == "mongodb":
+        try:
+            record_id = ObjectId(record_id)
+        except (InvalidId, TypeError):
+            return jsonify({"error": "Invalid record id"}), 400
 
     # ✅ Delete record
-    result = get_collection(table).delete_one({"_id": obj_id})
+    result = get_collection(table).delete_one({"_id" if DB_BACKEND == "mongodb" else "id": record_id})
 
     if result.deleted_count == 0:
         return jsonify({"error": "Record not found"}), 404

@@ -221,15 +221,10 @@
         pincodeInput.value = pincode;
         if (pincode.length !== 6) return;
 
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&postalcode=${encodeURIComponent(pincode)}&format=json&addressdetails=1&limit=1`);
+        const res = await fetch(`/lookup_pincode?pincode=${encodeURIComponent(pincode)}`);
+        if (!res.ok) return;
         const data = await res.json();
-        if (!data.length) return;
-        const addr = data[0].address || {};
-        const city = addr.city || addr.town || addr.village || addr.county || "";
-        const state = addr.state || "";
-        if (city) {
-          document.getElementById("party_place").value = state ? `${city} (${state})` : city;
-        }
+        if (data.place) document.getElementById("party_place").value = data.place;
       }
 
       async function fillPincodeFromPlace() {
