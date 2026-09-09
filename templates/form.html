@@ -33,16 +33,9 @@
           {% endfor %}
         </select>
       </div>
-      <div class="row mb-2">
-        <div class="col-md-8">
-          <label class="form-label">Party City</label>
-          <input type="text" id="party_place" name="ch_no" class="form-control" placeholder="Enter or search city" required>
-        </div>
-        <div class="col-md-4">
-          <label class="form-label">PIN Code</label>
-          <input type="text" id="party_pincode" name="pincode" class="form-control" placeholder="6-digit PIN" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required>
-        </div>
-      </div>
+      <label class="form-label">Party City</label>
+      <input type="text" id="party_place" name="ch_no" class="form-control mb-2" placeholder="Enter or search city"
+        required>
       <ul id="citySuggestions" class="list-group position-absolute" style="z-index:1000;width:100%;display:none;"></ul>
 
       <div class="mb-2">
@@ -171,25 +164,21 @@
         .then(res => res.json())
         .then(data => {
           const placeInput = document.getElementById("party_place");
-          const pincodeInput = document.getElementById("party_pincode");
           const gstInput = document.getElementById("party_gstin");
           console.log("Party Data", data);
           gstInput.value = data.gstin || "";
           placeInput.value = data.place || "";
-          pincodeInput.value = data.pincode || "";
           if (data.fixed_place) {
             gstInput.readOnly = true;
             gstInput.classList.add("bg-light");
 
             placeInput.readOnly = true;   // ✅ fixed place: cannot edit
-            pincodeInput.readOnly = true;
             placeInput.classList.add("bg-light");
           } else {
             gstInput.readOnly = false;
             gstInput.classList.remove("bg-light");
 
             placeInput.readOnly = false;  // ✅ editable if not fixed
-            pincodeInput.readOnly = false;
             placeInput.classList.remove("bg-light");
           }
         });
@@ -214,30 +203,6 @@
           }
         });
     }
-
-      async function fillPlaceFromPincode() {
-        const pincodeInput = document.getElementById("party_pincode");
-        const pincode = pincodeInput.value.replace(/\D/g, "").slice(0, 6);
-        pincodeInput.value = pincode;
-        if (pincode.length !== 6) return;
-
-        const res = await fetch(`/lookup_pincode?pincode=${encodeURIComponent(pincode)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.place) document.getElementById("party_place").value = data.place;
-      }
-
-      async function fillPincodeFromPlace() {
-        const place = document.getElementById("party_place").value.trim();
-        const pincodeInput = document.getElementById("party_pincode");
-        if (place.length < 3 || pincodeInput.value) return;
-
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(place)}&format=json&addressdetails=1&limit=1`);
-        const data = await res.json();
-        const pincode = data[0]?.address?.postcode?.replace(/\D/g, "").slice(0, 6) || "";
-        if (pincode) pincodeInput.value = pincode;
-      }
-
     $(document).ready(function () {
       // Party select2
       $('#party_name').select2({ tags: true, width: '100%', placeholder: "Select or type party name" })
@@ -246,15 +211,11 @@
       $('#transport').select2({ tags: true, width: '100%', placeholder: "Select or type transport name" })
         .on('change', fetchTransportDetails);
 
-      document.getElementById("party_pincode").addEventListener("change", fillPlaceFromPincode);
-      document.getElementById("party_place").addEventListener("blur", fillPincodeFromPlace);
-
       // Form submit validation
       // Form submit validation + pending request
       $('#billForm').on('submit', async function (e) {
         const partyName = $('#party_name').val().trim();
         const partyPlace = $('#party_place').val().trim();
-        const partyPincode = $('#party_pincode').val().trim();
         const partyGstin = $('#party_gstin').val().trim();
         const transportName = $('#transport').val().trim();
         const transportGstin = $('#transport_gstin').val().trim();
@@ -267,8 +228,8 @@
         });
 
         // Validate required fields
-        if (!partyName || !partyPlace || !partyGstin || !/^\d{6}$/.test(partyPincode)) {
-          alert("Please fill Party Name, Place, GSTIN and a valid 6-digit PIN Code.");
+        if (!partyName || !partyPlace || !partyGstin) {
+          alert("Please fill Party Name, Place and GSTIN before submitting.");
           e.preventDefault();
           return false;
         }
@@ -282,7 +243,7 @@
         await fetch('/add_pending', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'party', name: partyName, gstin: partyGstin, place: partyPlace, pincode: partyPincode })
+          body: JSON.stringify({ type: 'party', name: partyName, gstin: partyGstin, place: partyPlace })
         });
 
         // Send pending request for transport if new and GSTIN filled
@@ -323,13 +284,11 @@
         option.className = "list-group-item list-group-item-action";
         option.textContent = `${city} (${state})`;
         option.onclick = () => {
+          input.value = option.textContent;
           suggestionBox.style.display = "none";
 
           // Save this city to your backend cache
-          const pincode = (addr.postcode || "").replace(/\D/g, "").slice(0, 6);
-          input.value = option.textContent;
-          document.getElementById("party_pincode").value = pincode;
-          fetch(`/save_city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}&pincode=${encodeURIComponent(pincode)}`)
+          fetch(`/save_city?city=${encodeURIComponent(city)}&state=${encodeURIComponent(state)}`)
             .then(() => {
               // Check if city already exists in dropdown
               const select = document.getElementById("party_place");
@@ -387,7 +346,6 @@
         date: form.querySelector("input[name='date']").value,
         party_name: form.querySelector("select[name='customer_name']").value,
         party_gstin: form.querySelector("input[name='gstin']").value,
-        pin: form.querySelector("input[name='pincode']").value,
         transport: form.querySelector("select[name='transport']").value,
         transport_gstin: form.querySelector("input#transport_gstin").value,
         total_value: total_value.toFixed(2)
