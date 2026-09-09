@@ -57,18 +57,10 @@ def lookup_pincode():
     if not result or result[0].get("Status") != "Success" or not result[0].get("PostOffice"):
         return jsonify({"place": "", "pincode": pincode}), 404
     office = result[0]["PostOffice"][0]
-    name = normalize_text(office.get("Name", ""))
     district = normalize_text(office.get("District", ""))
     state = normalize_text(office.get("State", ""))
-    details = [part for part in (district, state) if part]
-    place = f"{name} ({', '.join(details)})" if name and details else name or ", ".join(details)
-    return jsonify({
-        "name": name,
-        "district": district,
-        "state": state,
-        "place": place,
-        "pincode": pincode,
-    })
+    place = f"{district} ({state})" if district and state else district or state
+    return jsonify({"place": place, "pincode": pincode})
 
 @app.route("/add_pending", methods=["POST"])
 def add_pending():
