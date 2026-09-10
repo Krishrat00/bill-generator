@@ -108,6 +108,7 @@ def download():
         "pincode": normalize_pincode(form.get("pincode", "")),
         "party_gstin": normalize_gstin(form.get("gstin", "")),
         "transport": normalize_text(form.get("transport", "")),
+        "transport_gstin": normalize_gstin(form.get("transport_gstin", "")),
         "units" : form.getlist('unit[]'),
         "items": []
     }
