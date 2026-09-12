@@ -72,12 +72,11 @@ def download():
     data = {
         "invoice_no": form.get("bill_no", ""),
         "date": formatted_date,
-        "party_name": normalize_text(form.get("customer_name", "")),
-        "place": normalize_text(form.get("ch_no", "")),
-        "pincode": normalize_pincode(form.get("pincode", "")),
-        "party_gstin": normalize_gstin(form.get("gstin", "")),
-        "transport": normalize_text(form.get("transport", "")),
-        "transport_gstin": normalize_gstin(form.get("transport_gstin", "")),
+        "party_name": form.get("customer_name", ""),
+        "place": form.get("ch_no", ""),
+        "party_gstin": format_gstin(form.get("gstin", "")),
+        "transport": form.get("transport", ""),
+        "transport_gstin": form.get("transport_gstin", ""),  # ✅ now included
         "units" : form.getlist('unit[]'),
         "items": []
     }
