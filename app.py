@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
-import io, json, os, re
+import io, json, os, re, time
 from datetime import datetime
-from urllib.request import urlopen
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from bill_template import generate_invoice
 from data_manager import DatabaseManager, normalize_gstin, normalize_pincode, normalize_text
 from db import DB_BACKEND, get_collection
@@ -12,6 +13,8 @@ data_manager = DatabaseManager()
 
 ADMIN_USER = os.environ.get("ADMIN_USER")
 ADMIN_PASS = os.environ.get("ADMIN_PASS")
+location_cache = {}
+last_location_request = 0.0
 
 # ---------- Routes ----------
 @app.route("/")
@@ -70,6 +73,43 @@ def lookup_pincode():
         "pincode": pincode,
     })
 
+@app.route("/search_location")
+def search_location():
+    query = request.args.get("q", "").strip()
+    if len(query) < 3:
+        return jsonify([])
+
+    cache_key = query.casefold()
+    cached = location_cache.get(cache_key)
+    if cached and time.time() - cached["created"] < 600:
+        return jsonify(cached["data"])
+
+    global last_location_request
+    elapsed = time.time() - last_location_request
+    if elapsed < 1:
+        return jsonify([]), 429
+
+    params = urlencode({
+        "countrycodes": "in",
+        "q": query,
+        "format": "json",
+        "addressdetails": "1",
+        "limit": "5",
+    })
+    request_url = f"https://nominatim.openstreetmap.org/search?{params}"
+    upstream_request = Request(
+        request_url,
+        headers={"User-Agent": os.getenv("NOMINATIM_USER_AGENT", "bill-generator/1.0")},
+    )
+    try:
+        last_location_request = time.time()
+        with urlopen(upstream_request, timeout=8) as response:
+            data = json.load(response)
+            location_cache[cache_key] = {"created": time.time(), "data": data}
+            return jsonify(data)
+    except Exception:
+        return jsonify([]), 502
+
 @app.route("/add_pending", methods=["POST"])
 def add_pending():
     data = request.get_json()
@@ -89,10 +129,14 @@ def message_page():
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
+    party = data_manager.get_party(form.get("customer_name", ""))
+    fixed_party = bool(party.get("fixed_place"))
     for field in ["bill_no","date","customer_name","ch_no","gstin","pincode","transport"]:
+        if field == "pincode" and fixed_party:
+            continue
         if not form.get(field):
             return f"{field} is required", 400
-    if len(normalize_pincode(form.get("pincode", ""))) != 6:
+    if not fixed_party and len(normalize_pincode(form.get("pincode", ""))) != 6:
         return "pincode must be 6 digits", 400
 
     try:
@@ -106,8 +150,9 @@ def download():
         "party_name": normalize_text(form.get("customer_name", "")),
         "place": normalize_text(form.get("ch_no", "")),
         "pincode": normalize_pincode(form.get("pincode", "")),
-        "party_gstin": normalize_gstin(form.get("gstin", "")),
+        "party_gstin": format_gstin(form.get("gstin", "")),
         "transport": normalize_text(form.get("transport", "")),
+        "transport_gstin": normalize_gstin(form.get("transport_gstin", "")),
         "units" : form.getlist('unit[]'),
         "items": []
     }
@@ -130,6 +175,7 @@ def download():
 
     output = io.BytesIO()
     total = generate_invoice(data, output)
+    data_manager.save_bill(data["invoice_no"], data, total)
     session['invoice_data'] = {
         "invoice_no": data["invoice_no"],
         "date": data["date"],
@@ -142,6 +188,40 @@ def download():
     output.seek(0)
     filename = f"{data['invoice_no']}_ANANT_CREATION.pdf"
     return send_file(output, as_attachment=True, download_name=filename, mimetype="application/pdf")
+
+@app.route("/bills/<invoice_no>")
+def get_bill(invoice_no):
+    bill = data_manager.get_bill(invoice_no)
+    if not bill:
+        return jsonify({"error": "Bill not found"}), 404
+    return jsonify(bill)
+
+@app.route("/bills/recent")
+def recent_bills():
+    try:
+        limit = request.args.get("limit", 20, type=int)
+        return jsonify(data_manager.get_recent_bills(limit))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit must be an integer"}), 400
+
+@app.route("/admin/bills")
+def admin_recent_bills():
+    if not session.get("admin"):
+        return jsonify({"error": "unauthorized"}), 401
+    try:
+        limit = request.args.get("limit", 50, type=int)
+        return jsonify(data_manager.get_recent_bills(limit))
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit must be an integer"}), 400
+
+@app.route("/admin/bills/<path:invoice_no>")
+def admin_bill(invoice_no):
+    if not session.get("admin"):
+        return jsonify({"error": "unauthorized"}), 401
+    bill = data_manager.get_bill(invoice_no)
+    if not bill:
+        return jsonify({"error": "Bill not found"}), 404
+    return jsonify(bill)
 
 # ---------- Admin ----------
 @app.route("/admin/login", methods=["GET", "POST"])

@@ -164,8 +164,11 @@
 
   </script>
   <script>
+    let fixedParty = false;
+
     function fetchPartyDetails() {
       const name = $('#party_name').val();
+      fixedParty = false;
       if (!name) return;
 
       fetch(`/get_party_details?name=${encodeURIComponent(name)}`)
@@ -174,11 +177,13 @@
           const placeInput = document.getElementById("party_place");
           const pincodeInput = document.getElementById("party_pincode");
           const gstInput = document.getElementById("party_gstin");
+          fixedParty = Boolean(data.fixed_place);
           console.log("Party Data", data);
           gstInput.value = data.gstin || "";
           placeInput.value = data.place || "";
           pincodeInput.value = data.pincode || "";
           if (data.fixed_place) {
+            pincodeInput.required = false;
             gstInput.readOnly = true;
             gstInput.classList.add("bg-light");
 
@@ -186,6 +191,7 @@
             pincodeInput.readOnly = true;
             placeInput.classList.add("bg-light");
           } else {
+            pincodeInput.required = true;
             gstInput.readOnly = false;
             gstInput.classList.remove("bg-light");
 
@@ -217,6 +223,7 @@
     }
 
       async function fillPlaceFromPincode() {
+        if (fixedParty) return;
         const pincodeInput = document.getElementById("party_pincode");
         const placeInput = document.getElementById("party_place");
         const pincode = pincodeInput.value.replace(/\D/g, "").slice(0, 6);
@@ -234,13 +241,14 @@
       }
 
       async function fillPincodeFromPlace() {
+        if (fixedParty) return;
         const place = document.getElementById("party_place").value.trim();
         const pincodeInput = document.getElementById("party_pincode");
         const locationHint = document.getElementById("locationHint");
         locationHint.textContent = "";
         if (place.length < 3 || pincodeInput.value) return;
 
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(place)}&format=json&addressdetails=1&limit=5`);
+        const res = await fetch(`/search_location?q=${encodeURIComponent(place)}`);
         const data = await res.json();
         const pincodes = [...new Set(data
           .map(result => result.address?.postcode?.replace(/\D/g, "").slice(0, 6))
@@ -287,7 +295,7 @@
         });
 
         // Validate required fields
-        if (!partyName || !partyPlace || !partyGstin || !/^\d{6}$/.test(partyPincode)) {
+        if (!partyName || !partyPlace || !partyGstin || (!fixedParty && !/^\d{6}$/.test(partyPincode))) {
           alert("Please fill Party Name, Place, GSTIN and a valid 6-digit PIN Code.");
           e.preventDefault();
           return false;
@@ -323,19 +331,26 @@
   <script>
     const input = document.getElementById("party_place");
     const suggestionBox = document.getElementById("citySuggestions");
+    let locationSearchTimer;
+    let locationSearchController;
 
-    input.addEventListener("input", async function () {
+    input.addEventListener("input", function () {
       const query = this.value.trim();
+      clearTimeout(locationSearchTimer);
+      if (locationSearchController) locationSearchController.abort();
       if (query.length < 3) {
         suggestionBox.style.display = "none";
         return;
       }
 
-      const res = await fetch(`https://nominatim.openstreetmap.org/search?countrycodes=in&q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`);
-      const data = await res.json();
+      locationSearchTimer = setTimeout(async () => {
+        locationSearchController = new AbortController();
+        const res = await fetch(`/search_location?q=${encodeURIComponent(query)}`, { signal: locationSearchController.signal });
+        if (!res.ok) return;
+        const data = await res.json();
 
-      suggestionBox.innerHTML = "";
-      data.forEach(place => {
+        suggestionBox.innerHTML = "";
+        data.forEach(place => {
         const addr = place.address || {};
         const city = addr.city || addr.town || addr.village || addr.county || place.display_name.split(",")[0];
         const state = addr.state || "—";
@@ -360,10 +375,11 @@
               }
             });
         };
-        suggestionBox.appendChild(option);
-      });
+          suggestionBox.appendChild(option);
+        });
 
-      suggestionBox.style.display = "block";
+        suggestionBox.style.display = "block";
+      }, 700);
     });
 
     document.addEventListener("click", e => {

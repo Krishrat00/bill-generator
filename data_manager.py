@@ -1,6 +1,8 @@
 import os
 import re
 import sqlite3
+import json
+from datetime import datetime, timezone
 from contextlib import closing
 
 from db import DB_BACKEND, get_collection
@@ -32,6 +34,7 @@ class DatabaseManager:
             self.transports = get_collection("transports")
             self.cities = get_collection("cities")
             self.pending = get_collection("pending_requests")
+            self.bills = get_collection("bills")
             self._create_mongo_indexes()
 
     def _connect(self):
@@ -55,6 +58,12 @@ class DatabaseManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT,
                     name TEXT, gstin TEXT, place TEXT, pincode TEXT DEFAULT ''
                 );
+                CREATE TABLE IF NOT EXISTS bills (
+                    invoice_no TEXT PRIMARY KEY,
+                    bill_json TEXT NOT NULL,
+                    total_value REAL,
+                    created_at TEXT NOT NULL
+                );
             """)
             for table in ("parties", "cities", "pending_requests"):
                 columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
@@ -67,6 +76,7 @@ class DatabaseManager:
         self.transports.create_index("name", unique=True)
         self.cities.create_index([("city", 1), ("state", 1)], unique=True)
         self.pending.create_index([("type", 1), ("name", 1)], unique=True)
+        self.bills.create_index("invoice_no", unique=True)
 
     def add_party(self, name, gstin="", place="", pincode="", fixed_place=False):
         name = normalize_text(name)
@@ -223,3 +233,61 @@ class DatabaseManager:
             cursor = conn.execute("DELETE FROM pending_requests WHERE type=? AND name=?", (type_, name))
             conn.commit()
             return cursor.rowcount > 0
+
+    def save_bill(self, invoice_no, bill_data, total_value):
+        invoice_no = str(invoice_no or "").strip()
+        if not invoice_no:
+            return False
+        created_at = datetime.now(timezone.utc)
+        document = {
+            "invoice_no": invoice_no,
+            "bill": bill_data,
+            "total_value": total_value,
+            "created_at": created_at,
+        }
+        if DB_BACKEND == "mongodb":
+            self.bills.update_one(
+                {"invoice_no": invoice_no},
+                {"$set": document},
+                upsert=True,
+            )
+        else:
+            with closing(self._connect()) as conn:
+                conn.execute("""
+                    INSERT OR REPLACE INTO bills (invoice_no, bill_json, total_value, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (invoice_no, json.dumps(bill_data), total_value, created_at.isoformat()))
+                conn.commit()
+        return True
+
+    def get_bill(self, invoice_no):
+        invoice_no = str(invoice_no or "").strip()
+        if DB_BACKEND == "mongodb":
+            return self.bills.find_one({"invoice_no": invoice_no}, {"_id": 0})
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT invoice_no, bill_json, total_value, created_at FROM bills WHERE invoice_no = ?",
+                (invoice_no,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "invoice_no": row[0],
+            "bill": json.loads(row[1]),
+            "total_value": row[2],
+            "created_at": row[3],
+        }
+
+    def get_recent_bills(self, limit=20):
+        limit = max(1, min(int(limit), 100))
+        if DB_BACKEND == "mongodb":
+            return list(self.bills.find({}, {"_id": 0}).sort("created_at", -1).limit(limit))
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                "SELECT invoice_no, bill_json, total_value, created_at FROM bills ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {"invoice_no": row[0], "bill": json.loads(row[1]), "total_value": row[2], "created_at": row[3]}
+            for row in rows
+        ]
