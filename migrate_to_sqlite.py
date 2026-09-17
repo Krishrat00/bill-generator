@@ -15,6 +15,7 @@ def migrate_json_to_sqlite(json_dir="data", db_path="data/data.db"):
             name TEXT UNIQUE,
             gstin TEXT,
             place TEXT,
+            pincode TEXT DEFAULT '',
             fixed_place INTEGER DEFAULT 0
         )
     """)
@@ -29,7 +30,8 @@ def migrate_json_to_sqlite(json_dir="data", db_path="data/data.db"):
         CREATE TABLE IF NOT EXISTS cities (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             city TEXT,
-            state TEXT
+            state TEXT,
+            pincode TEXT DEFAULT ''
         )
     """)
     c.execute("""
@@ -38,7 +40,8 @@ def migrate_json_to_sqlite(json_dir="data", db_path="data/data.db"):
             type TEXT,
             name TEXT,
             gstin TEXT,
-            place TEXT
+            place TEXT,
+            pincode TEXT DEFAULT ''
         )
     """)
 
@@ -57,12 +60,13 @@ def migrate_json_to_sqlite(json_dir="data", db_path="data/data.db"):
     parties = load_json("parties.json")
     for k, v in parties.items():
         c.execute("""
-            INSERT OR IGNORE INTO parties (name, gstin, place, fixed_place)
-            VALUES (?, ?, ?, ?)
+            INSERT OR IGNORE INTO parties (name, gstin, place, pincode, fixed_place)
+            VALUES (?, ?, ?, ?, ?)
         """, (
             v.get("name", k),
             v.get("gstin", ""),
             v.get("place", ""),
+            "",
             int(v.get("fixed_place", False))
         ))
 
@@ -82,21 +86,22 @@ def migrate_json_to_sqlite(json_dir="data", db_path="data/data.db"):
     for state, city_list in cities.items():
         for city in city_list:
             c.execute("""
-                INSERT INTO cities (city, state)
-                VALUES (?, ?)
-            """, (city, state))
+                INSERT INTO cities (city, state, pincode)
+                VALUES (?, ?, ?)
+            """, (city, state, ""))
 
     # Migrate Pending Requests
     pending = load_json("pending_requests.json")
     for k, v in pending.items():
         c.execute("""
-            INSERT INTO pending_requests (type, name, gstin, place)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO pending_requests (type, name, gstin, place, pincode)
+            VALUES (?, ?, ?, ?, ?)
         """, (
             v.get("type", ""),
             v.get("name", ""),
             v.get("gstin", ""),
-            v.get("place", "")
+            v.get("place", ""),
+            ""
         ))
 
     conn.commit()

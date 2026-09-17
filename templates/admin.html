@@ -106,6 +106,7 @@
             <option value="cities">Cities</option>
             <option value="pending_requests">Pending Requests</option>
             <option value="bank_details">Bank Details</option>
+            <option value="bills">Recent Bills</option>
         </select>
         <button class="add-btn" onclick="addRecord()">+ Add Record</button>
     </div>
@@ -121,7 +122,12 @@
 
         async function loadTable() {
             const table = tableSelect.value;
-            const res = await fetch(`/admin/data?table=${table}`);
+            const endpoint = table === 'bills' ? '/admin/bills?limit=50' : `/admin/data?table=${table}`;
+            const res = await fetch(endpoint);
+            if (res.status === 401) {
+                window.location.href = '/admin/login';
+                return;
+            }
             const data = await res.json();
             renderTable(data, table);
         }
@@ -143,18 +149,37 @@
             data.forEach(row => {
                 let rowHTML = '<tr>';
                 keys.forEach(k => rowHTML += `<td>${row[k]}</td>`);
-                rowHTML += `<td>
-                    <button class="delete-btn" onclick="deleteRecord('${table}', '${row.id}')">Delete</button>
-                </td>`;
+                if (table !== 'bills') {
+                    rowHTML += `<td>
+                        <button class="delete-btn" onclick="deleteRecord('${table}', '${row.id}')">Delete</button>
+                    </td>`;
+                }
                 if (table === 'pending_requests') {
                     rowHTML += `<td>
                         <button class="approve-btn" onclick="approve('${row.type}', '${row.name}')">Approve</button>
                         <button class="reject-btn" onclick="reject('${row.type}', '${row.name}')">Reject</button>
                     </td>`;
                 }
+                if (table === 'bills') {
+                    rowHTML += `<td><button class="approve-btn" onclick="viewBill('${encodeURIComponent(row.invoice_no)}')">View</button></td>`;
+                }
                 rowHTML += '</tr>';
                 tbody.innerHTML += rowHTML;
             });
+        }
+
+        async function viewBill(invoiceNo) {
+            const res = await fetch(`/admin/bills/${invoiceNo}`);
+            if (res.status === 401) {
+                window.location.href = '/admin/login';
+                return;
+            }
+            const bill = await res.json();
+            if (!res.ok) {
+                alert(bill.error || 'Bill not found');
+                return;
+            }
+            alert(JSON.stringify(bill, null, 2));
         }
 
         async function deleteRecord(table, id) {
