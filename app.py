@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
 import io, json, os, re, time
-from datetime import datetime
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from bill_template import generate_invoice
@@ -129,15 +130,9 @@ def message_page():
 @app.route("/download", methods=["POST"])
 def download():
     form = request.form
-    party = data_manager.get_party(form.get("customer_name", ""))
-    fixed_party = bool(party.get("fixed_place"))
-    for field in ["bill_no","date","customer_name","ch_no","gstin","pincode","transport"]:
-        if field == "pincode" and fixed_party:
-            continue
+    for field in ["bill_no","date","customer_name","ch_no","gstin","transport"]:
         if not form.get(field):
             return f"{field} is required", 400
-    if not fixed_party and len(normalize_pincode(form.get("pincode", ""))) != 6:
-        return "pincode must be 6 digits", 400
 
     try:
         formatted_date = datetime.strptime(form.get("date", ""), "%Y-%m-%d").strftime("%d/%m/%Y")
@@ -248,12 +243,145 @@ def admin_pending():
     pending = data_manager.get_all_pending()
     return render_template("admin.html", pending=pending)
 
+@app.route("/admin/analytics")
+def admin_analytics():
+    if not session.get("admin"):
+        return redirect("/admin/login")
+
+    today = datetime.now(timezone.utc).date()
+    view = request.args.get("view", "month")
+    if view not in {"month", "year"}:
+        view = "month"
+    try:
+        selected_month = datetime.strptime(request.args.get("month", ""), "%Y-%m").date().replace(day=1)
+    except ValueError:
+        selected_month = today.replace(day=1)
+    try:
+        selected_year = int(request.args.get("year", today.year))
+    except (TypeError, ValueError):
+        selected_year = today.year
+    if not 1 <= selected_year <= today.year:
+        selected_year = today.year
+
+    if view == "month":
+        period_start = selected_month
+        period_end = period_start + timedelta(days=monthrange(period_start.year, period_start.month)[1])
+        period_label = period_start.strftime("%B %Y")
+        chart_buckets = {
+            period_start + timedelta(days=offset): 0.0
+            for offset in range((period_end - period_start).days)
+        }
+    else:
+        period_start = date(selected_year, 1, 1)
+        period_end = date(selected_year + 1, 1, 1)
+        period_label = str(selected_year)
+        chart_buckets = {date(selected_year, month, 1): 0.0 for month in range(1, 13)}
+    bucket_counts = {bucket: 0 for bucket in chart_buckets}
+
+    start_at = datetime.combine(period_start, datetime.min.time(), tzinfo=timezone.utc)
+    end_at = datetime.combine(period_end, datetime.min.time(), tzinfo=timezone.utc)
+    period_bills = data_manager.get_bills_between(start_at, end_at)
+    total_value = 0.0
+    party_totals = {}
+    enriched_bills = []
+
+    for bill_record in period_bills:
+        bill = bill_record.get("bill") or {}
+        amount = float(bill_record.get("total_value") or 0)
+        party_name = bill.get("party_name") or "Unknown party"
+        total_value += amount
+        party_total = party_totals.setdefault(party_name, {"amount": 0.0, "bill_count": 0})
+        party_total["amount"] += amount
+        party_total["bill_count"] += 1
+
+        created_at = bill_record.get("created_at")
+        try:
+            created_datetime = created_at if isinstance(created_at, datetime) else datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+            created_date = created_datetime.astimezone(timezone.utc).date() if created_datetime.tzinfo else created_datetime.date()
+        except (TypeError, ValueError):
+            created_date = None
+        if view == "month":
+            bucket = created_date
+        else:
+            bucket = date(selected_year, created_date.month, 1) if created_date and created_date.year == selected_year else None
+        if bucket in chart_buckets:
+            chart_buckets[bucket] += amount
+            bucket_counts[bucket] += 1
+
+        enriched_bills.append({
+            "invoice_no": bill_record.get("invoice_no", ""),
+            "party_name": party_name,
+            "total_value": amount,
+            "created_at": created_date.strftime("%d %b %Y") if created_date else str(created_at or "-"),
+        })
+
+    chart_days = [
+        {
+            "label": bucket.strftime("%d") if view == "month" else bucket.strftime("%b"),
+            "date": bucket.strftime("%d %b %Y") if view == "month" else bucket.strftime("%B %Y"),
+            "value": amount,
+            "bill_count": bucket_counts[bucket],
+        }
+        for bucket, amount in chart_buckets.items()
+        if amount != 0
+    ]
+    chart_max = max((bucket["value"] for bucket in chart_days), default=0.0)
+    party_summaries = sorted(
+        ({"name": name, **values} for name, values in party_totals.items()),
+        key=lambda party: party["amount"],
+        reverse=True,
+    )
+    return render_template(
+        "admin_analytics.html",
+        bills=enriched_bills[:10],
+        bill_count=len(period_bills),
+        total_value=total_value,
+        party_summaries=party_summaries,
+        party_count=len(party_summaries),
+        chart_days=chart_days,
+        chart_max=chart_max,
+        view=view,
+        selected_month=selected_month.strftime("%Y-%m"),
+        selected_year=selected_year,
+        period_label=period_label,
+    )
+
 @app.route("/admin/approve/<type_>/<path:name>")
 def admin_approve(type_, name):
     if not session.get("admin"):
         return jsonify({"error": "unauthorized"}), 401
     data_manager.approve_pending(type_, name)
     return jsonify({"status": "approved"})
+
+@app.route("/admin/approve-bulk", methods=["POST"])
+def admin_approve_bulk():
+    if not session.get("admin"):
+        return jsonify({"error": "unauthorized"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    requests_to_approve = payload.get("requests")
+    if not isinstance(requests_to_approve, list) or not requests_to_approve:
+        return jsonify({"error": "Select at least one pending request"}), 400
+    if len(requests_to_approve) > 1000:
+        return jsonify({"error": "Select no more than 1000 requests at a time"}), 400
+
+    approved = 0
+    failed = []
+    for pending_request in requests_to_approve:
+        if not isinstance(pending_request, dict):
+            failed.append({"error": "Invalid pending request"})
+            continue
+        type_ = pending_request.get("type")
+        name = pending_request.get("name")
+        if type_ not in {"party", "transport"} or not isinstance(name, str) or not name.strip():
+            failed.append({"type": type_, "name": name, "error": "Invalid pending request"})
+            continue
+        if data_manager.approve_pending(type_, name):
+            approved += 1
+        else:
+            failed.append({"type": type_, "name": name, "error": "Request not found"})
+
+    return jsonify({"approved": approved, "failed": failed})
 
 @app.route("/admin/reject/<type_>/<path:name>")
 def admin_reject(type_, name):

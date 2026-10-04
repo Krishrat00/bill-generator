@@ -40,7 +40,7 @@
         </div>
         <div class="col-md-4">
           <label class="form-label">PIN Code</label>
-          <input type="text" id="party_pincode" name="pincode" class="form-control" placeholder="6-digit PIN" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required>
+          <input type="text" id="party_pincode" name="pincode" class="form-control" placeholder="6-digit PIN (optional)" inputmode="numeric" maxlength="6" pattern="[0-9]{6}">
           <div id="locationHint" class="form-text" aria-live="polite"></div>
         </div>
       </div>
@@ -295,8 +295,8 @@
         });
 
         // Validate required fields
-        if (!partyName || !partyPlace || !partyGstin || (!fixedParty && !/^\d{6}$/.test(partyPincode))) {
-          alert("Please fill Party Name, Place, GSTIN and a valid 6-digit PIN Code.");
+        if (!partyName || !partyPlace || !partyGstin) {
+          alert("Please fill Party Name, Place and GSTIN before submitting.");
           e.preventDefault();
           return false;
         }
