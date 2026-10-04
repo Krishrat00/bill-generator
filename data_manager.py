@@ -64,6 +64,7 @@ class DatabaseManager:
                     total_value REAL,
                     created_at TEXT NOT NULL
                 );
+                CREATE INDEX IF NOT EXISTS idx_bills_created_at ON bills(created_at);
             """)
             for table in ("parties", "cities", "pending_requests"):
                 columns = [row[1] for row in conn.execute(f"PRAGMA table_info({table})")]
@@ -77,6 +78,7 @@ class DatabaseManager:
         self.cities.create_index([("city", 1), ("state", 1)], unique=True)
         self.pending.create_index([("type", 1), ("name", 1)], unique=True)
         self.bills.create_index("invoice_no", unique=True)
+        self.bills.create_index("created_at")
 
     def add_party(self, name, gstin="", place="", pincode="", fixed_place=False):
         name = normalize_text(name)
@@ -286,6 +288,24 @@ class DatabaseManager:
             rows = conn.execute(
                 "SELECT invoice_no, bill_json, total_value, created_at FROM bills ORDER BY created_at DESC LIMIT ?",
                 (limit,),
+            ).fetchall()
+        return [
+            {"invoice_no": row[0], "bill": json.loads(row[1]), "total_value": row[2], "created_at": row[3]}
+            for row in rows
+        ]
+
+    def get_bills_between(self, start_at, end_at):
+        if DB_BACKEND == "mongodb":
+            return list(self.bills.find(
+                {"created_at": {"$gte": start_at, "$lt": end_at}},
+                {"_id": 0},
+            ).sort("created_at", -1))
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """SELECT invoice_no, bill_json, total_value, created_at
+                   FROM bills WHERE created_at >= ? AND created_at < ?
+                   ORDER BY created_at DESC""",
+                (start_at.isoformat(), end_at.isoformat()),
             ).fetchall()
         return [
             {"invoice_no": row[0], "bill": json.loads(row[1]), "total_value": row[2], "created_at": row[3]}

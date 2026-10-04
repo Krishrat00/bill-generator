@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Bill Analytics</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #18352d;
+            --muted: #63766f;
+            --paper: #f3f6f1;
+            --line: #dce5df;
+            --green: #17634d;
+            --green-soft: #dcebe3;
+            --coral: #d36d4b;
+            --white: #fff;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--paper);
+            color: var(--ink);
+            font-family: "Aptos", "Segoe UI", sans-serif;
+        }
+
+        a { color: inherit; }
+
+        .page {
+            width: min(1120px, 100% - 32px);
+            margin: 0 auto;
+            padding: 20px 0 36px;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .eyebrow {
+            margin: 0 0 5px;
+            color: var(--green);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        h1 {
+            margin: 0;
+            font-family: Georgia, serif;
+            font-size: 30px;
+            font-weight: 500;
+        }
+
+        .nav { display: flex; align-items: center; gap: 14px; font-size: 14px; }
+        .nav a { text-decoration-thickness: 1px; text-underline-offset: 3px; }
+        .nav .logout { color: var(--muted); }
+
+        .period-tools { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 22px 0 14px; }
+        .period-tabs { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 6px; background: var(--white); }
+        .period-tabs a { padding: 8px 15px; border-radius: 4px; color: var(--muted); font-size: 13px; text-decoration: none; }
+        .period-tabs a[aria-current="page"] { background: var(--green); color: var(--white); }
+        .period-form { display: flex; align-items: end; gap: 9px; }
+        .period-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+        .period-form input { min-height: 38px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--white); color: var(--ink); font: inherit; }
+        .period-form button { min-height: 38px; padding: 0 13px; border: 0; border-radius: 4px; background: var(--coral); color: var(--white); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+
+        .summary {
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+            gap: 12px;
+            padding: 22px 0 14px;
+        }
+
+        .summary h2 { margin: 0; font-size: 17px; }
+        .summary p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+            background: rgba(255, 255, 255, .58);
+        }
+
+        .metric { min-width: 0; padding: 17px 18px; border-right: 1px solid var(--line); }
+        .metric:last-child { border-right: 0; }
+        .metric-label { display: block; color: var(--muted); font-size: 12px; }
+        .metric-value { display: block; margin-top: 7px; font-size: 22px; font-weight: 700; overflow-wrap: anywhere; }
+        .metric-note { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+
+        .content-grid {
+            padding-top: 28px;
+        }
+
+        .section-heading {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .section-heading h2 { margin: 0; font-size: 16px; }
+        .section-heading span { color: var(--muted); font-size: 12px; }
+
+        .chart-scroll { overflow-x: auto; border-bottom: 1px solid var(--line); }
+        .chart {
+            display: grid;
+            grid-template-columns: repeat(var(--chart-count), minmax(30px, 1fr));
+            align-items: end;
+            gap: 8px;
+            height: 204px;
+            padding: 12px 0 0;
+            min-width: max-content;
+        }
+
+        .chart-day { display: flex; height: 100%; min-width: 0; flex-direction: column; justify-content: end; align-items: center; gap: 8px; }
+        .bar-area { display: flex; width: 100%; height: 150px; align-items: end; justify-content: center; }
+        .bar {
+            width: min(28px, 72%);
+            min-height: 3px;
+            border-radius: 3px 3px 0 0;
+            background: var(--green);
+        }
+        .chart-day:nth-child(2n) .bar { background: var(--coral); }
+        .day-label { color: var(--muted); font-size: 11px; text-align: center; }
+
+        .recent, .parties, .dates { padding-top: 30px; }
+        .table-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+        th { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        td { font-size: 13px; }
+        td.amount { text-align: right; font-weight: 700; }
+        th:last-child { text-align: right; }
+        .empty { padding: 24px 10px; color: var(--muted); text-align: center; }
+        .table-note { color: var(--muted); font-size: 12px; }
+
+        @media (max-width: 700px) {
+            .page { width: min(100% - 24px, 560px); padding-top: 14px; }
+            .topbar { align-items: flex-start; }
+            h1 { font-size: 25px; }
+            .nav { gap: 10px; font-size: 13px; }
+            .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .metric:nth-child(2) { border-right: 0; }
+            .metric:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+            .metric:nth-child(3) { grid-column: 1 / -1; }
+            .metric { padding: 14px 12px; }
+            .metric-value { font-size: 19px; }
+            .period-tools { align-items: flex-start; flex-direction: column; padding-top: 18px; }
+            .period-form { width: 100%; }
+            .period-form label { flex: 1; }
+            .period-form input { width: 100%; }
+            .chart { gap: 5px; }
+            .recent, .parties, .dates { padding-top: 24px; }
+        }
+
+        @media (max-width: 390px) {
+            .topbar { flex-direction: column; }
+            .metric-value { font-size: 17px; }
+            .period-tabs a { padding-inline: 11px; }
+            .chart { gap: 4px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">Anant Creation · Admin</p>
+                <h1>Bill analytics</h1>
+            </div>
+            <nav class="nav" aria-label="Admin navigation">
+                <a href="/admin/pending">Admin panel</a>
+                <a class="logout" href="/admin/logout">Logout</a>
+            </nav>
+        </header>
+
+        <section aria-labelledby="summary-title">
+            <div class="period-tools">
+                <div class="period-tabs" role="group" aria-label="Analytics period">
+                    <a href="?view=month&amp;month={{ selected_month }}" {% if view == "month" %}aria-current="page"{% endif %}>Month</a>
+                    <a href="?view=year&amp;year={{ selected_year }}" {% if view == "year" %}aria-current="page"{% endif %}>Year</a>
+                </div>
+                <form class="period-form" method="get" action="/admin/analytics">
+                    <input type="hidden" name="view" value="{{ view }}">
+                    {% if view == "month" %}
+                    <label for="period-month">Select month<input id="period-month" type="month" name="month" value="{{ selected_month }}"></label>
+                    {% else %}
+                    <label for="period-year">Select year<input id="period-year" type="number" name="year" min="1" max="{{ selected_year }}" value="{{ selected_year }}"></label>
+                    {% endif %}
+                    <button type="submit">Apply</button>
+                </form>
+            </div>
+            <div class="summary">
+                <div>
+                    <h2 id="summary-title">Performance for {{ period_label }}</h2>
+                    <p>Amounts are based on bill creation date.</p>
+                </div>
+            </div>
+            <div class="metrics">
+                <div class="metric">
+                    <span class="metric-label">Bills created</span>
+                    <span class="metric-value" id="bill-count">{{ bill_count }}</span>
+                    <span class="metric-note">In {{ period_label }}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total billed</span>
+                    <span class="metric-value">₹{{ "{:,.2f}".format(total_value) }}</span>
+                    <span class="metric-note">Across tracked bills</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Parties billed</span>
+                    <span class="metric-value">{{ party_count }}</span>
+                    <span class="metric-note">Unique parties in period</span>
+                </div>
+            </div>
+        </section>
+
+        <div class="content-grid">
+            <section aria-labelledby="chart-title">
+                <div class="section-heading">
+                    <h2 id="chart-title">Billed amount by {% if view == "month" %}day{% else %}month{% endif %}</h2>
+                    <span>{{ period_label }}</span>
+                </div>
+                <div class="chart-scroll" role="img" aria-label="Billed amount by {% if view == "month" %}day{% else %}month{% endif %} for {{ period_label }}">
+                    <div class="chart" style="--chart-count: {{ chart_days|length }}">
+                    {% for day in chart_days %}
+                    <div class="chart-day" title="{{ day.date }}: ₹{{ "{:,.2f}".format(day.value) }}">
+                        <div class="bar-area"><div class="bar" style="height: {{ (day.value / chart_max * 100) if chart_max else 0 }}%"></div></div>
+                        <span class="day-label">{{ day.label }}<br>{{ day.date }}</span>
+                    </div>
+                    {% endfor %}
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <section class="dates" aria-labelledby="dates-title">
+            <div class="section-heading">
+                <h2 id="dates-title">{% if view == "month" %}Daily amounts{% else %}Monthly amounts{% endif %}</h2>
+                <span>Days with billed amount · {{ period_label }}</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>{% if view == "month" %}Date{% else %}Month{% endif %}</th><th>Bills</th><th>Amount</th></tr></thead>
+                    <tbody>
+                        {% for bucket in chart_days %}
+                        <tr><td>{{ bucket.date }}</td><td>{{ bucket.bill_count }}</td><td class="amount">₹{{ "{:,.2f}".format(bucket.value) }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="parties" aria-labelledby="party-title">
+            <div class="section-heading">
+                <h2 id="party-title">Party-wise amount</h2>
+                <span>{{ party_count }} parties · highest amount first</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Party</th><th>Bills</th><th>Amount</th></tr></thead>
+                    <tbody>
+                        {% for party in party_summaries %}
+                        <tr><td>{{ party.name }}</td><td>{{ party.bill_count }}</td><td class="amount">₹{{ "{:,.2f}".format(party.amount) }}</td></tr>
+                        {% else %}
+                        <tr><td class="empty" colspan="3">No bills found for {{ period_label }}.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="recent" aria-labelledby="recent-title">
+            <div class="section-heading">
+                <h2 id="recent-title">Invoices in {{ period_label }}</h2>
+                <span>Most recent 10 · <span class="table-note">of {{ bill_count }}</span></span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr><th>Invoice</th><th>Date created</th><th>Party</th><th>Amount</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in bills %}
+                        <tr>
+                            <td>{{ bill.invoice_no }}</td>
+                            <td>{{ bill.created_at }}</td>
+                            <td>{{ bill.party_name }}</td>
+                            <td class="amount">₹{{ "{:,.2f}".format(bill.total_value) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td class="empty" colspan="4">No saved bills yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

@@ -76,6 +76,15 @@
             margin-left: 10px;
         }
 
+        .analytics-link {
+            display: inline-block;
+            padding: 7px 10px;
+            border-radius: 4px;
+            background: #155e4b;
+            color: white;
+            text-decoration: none;
+        }
+
         select,
         input {
             padding: 6px;
@@ -87,6 +96,18 @@
             align-items: center;
             margin-bottom: 15px;
         }
+
+        .bulk-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 12px 0;
+        }
+
+        .bulk-actions[hidden] { display: none; }
+        .bulk-actions button { background: #17634d; color: white; padding: 8px 12px; }
+        .bulk-actions span { color: #555; font-size: 14px; }
+        .pending-select, #selectAllPending { width: 18px; height: 18px; cursor: pointer; }
     </style>
 </head>
 
@@ -94,6 +115,7 @@
     <div class="top-bar">
         <h2>Admin Panel</h2>
         <div>
+            <a class="analytics-link" href="/admin/analytics">Bill Analytics</a>
             <button class="logout-btn" onclick="logout()">Logout</button>
         </div>
     </div>
@@ -111,6 +133,11 @@
         <button class="add-btn" onclick="addRecord()">+ Add Record</button>
     </div>
 
+    <div id="bulkActions" class="bulk-actions" hidden>
+        <span id="selectedCount" aria-live="polite">0 selected</span>
+        <button id="bulkApproveButton" type="button">Approve selected</button>
+    </div>
+
     <table id="dataTable">
         <thead></thead>
         <tbody></tbody>
@@ -119,6 +146,10 @@
     <script>
         const tableSelect = document.getElementById('tableSelect');
         const dataTable = document.getElementById('dataTable');
+        const bulkActions = document.getElementById('bulkActions');
+        const selectedCount = document.getElementById('selectedCount');
+        const bulkApproveButton = document.getElementById('bulkApproveButton');
+        let pendingRows = [];
 
         async function loadTable() {
             const table = tableSelect.value;
@@ -135,8 +166,10 @@
         function renderTable(data, table) {
             const thead = dataTable.querySelector('thead');
             const tbody = dataTable.querySelector('tbody');
+            pendingRows = table === 'pending_requests' ? data || [] : [];
             thead.innerHTML = '';
             tbody.innerHTML = '';
+            updateBulkControls();
 
             if (!data || data.length === 0) {
                 thead.innerHTML = '<tr><th>No Data Found</th></tr>';
@@ -144,12 +177,18 @@
             }
 
             const keys = Object.keys(data[0]);
-            thead.innerHTML = `<tr>${keys.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
+            const selectionHeader = table === 'pending_requests'
+                ? '<th><input id="selectAllPending" type="checkbox" aria-label="Select all pending requests"></th>'
+                : '';
+            thead.innerHTML = `<tr>${selectionHeader}${keys.map(k => `<th>${k}</th>`).join('')}<th>Actions</th></tr>`;
 
-            data.forEach(row => {
+            data.forEach((row, index) => {
                 let rowHTML = '<tr>';
+                if (table === 'pending_requests') {
+                    rowHTML += `<td><input class="pending-select" type="checkbox" value="${index}" aria-label="Select pending request"></td>`;
+                }
                 keys.forEach(k => rowHTML += `<td>${row[k]}</td>`);
-                if (table !== 'bills') {
+                if (table !== 'bills' && table !== 'pending_requests') {
                     rowHTML += `<td>
                         <button class="delete-btn" onclick="deleteRecord('${table}', '${row.id}')">Delete</button>
                     </td>`;
@@ -166,6 +205,46 @@
                 rowHTML += '</tr>';
                 tbody.innerHTML += rowHTML;
             });
+            updateBulkControls();
+        }
+
+        function updateBulkControls() {
+            const selected = dataTable.querySelectorAll('tbody .pending-select:checked').length;
+            bulkActions.hidden = tableSelect.value !== 'pending_requests' || selected === 0;
+            selectedCount.textContent = `${selected} selected`;
+            bulkApproveButton.disabled = selected === 0;
+            const selectAll = document.getElementById('selectAllPending');
+            if (selectAll) {
+                const checkboxes = dataTable.querySelectorAll('tbody .pending-select');
+                selectAll.checked = checkboxes.length > 0 && selected === checkboxes.length;
+                selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+            }
+        }
+
+        async function approveSelected() {
+            const selected = Array.from(dataTable.querySelectorAll('tbody .pending-select:checked'))
+                .map(checkbox => pendingRows[Number(checkbox.value)])
+                .filter(row => row)
+                .map(row => ({ type: row.type, name: row.name }));
+            if (!selected.length || !confirm(`Approve ${selected.length} selected requests?`)) return;
+
+            const res = await fetch('/admin/approve-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ requests: selected })
+            });
+            if (res.status === 401) {
+                window.location.href = '/admin/login';
+                return;
+            }
+            const result = await res.json();
+            if (!res.ok) {
+                alert(result.error || 'Could not approve selected requests.');
+                return;
+            }
+            const failedCount = result.failed.length;
+            alert(`${result.approved} approved${failedCount ? `, ${failedCount} could not be approved` : ''}.`);
+            await loadTable();
         }
 
         async function viewBill(invoiceNo) {
@@ -264,6 +343,17 @@
             window.location.href = '/admin/logout';
         }
 
+        dataTable.addEventListener('change', event => {
+            if (event.target.id === 'selectAllPending') {
+                dataTable.querySelectorAll('tbody .pending-select').forEach(checkbox => {
+                    checkbox.checked = event.target.checked;
+                });
+            }
+            if (event.target.id === 'selectAllPending' || event.target.classList.contains('pending-select')) {
+                updateBulkControls();
+            }
+        });
+        bulkApproveButton.addEventListener('click', approveSelected);
         tableSelect.addEventListener('change', loadTable);
         window.onload = loadTable;
     </script>
