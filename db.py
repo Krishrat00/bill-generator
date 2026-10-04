@@ -89,7 +89,7 @@ else:
             raise RuntimeError("Set MONGO_URI or MONGO_USER, MONGO_PASS, and MONGO_HOST")
         mongo_uri = f"mongodb+srv://{user}:{password}@{host}/?appName=bill-cluster0"
 
-    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000, maxPoolSize=20)
     db = client[os.getenv("MONGO_DB", "bill_app")]
 
     def get_collection(name):
