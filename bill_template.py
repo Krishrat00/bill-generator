@@ -7,6 +7,9 @@ from reportlab.lib.units import mm
 from num2words import num2words  # pip install num2words
 from db import get_collection
 
+DEFAULT_HSN_CODE = "5407"
+ITEM_HSN_CODES = {"KURTA": "6203"}
+
 def sanitize_string(s):
     """
     Removes unwanted special characters and normalizes whitespace.
@@ -103,7 +106,7 @@ def generate_invoice(data, filename="invoice_fixed.pdf"):
         total += amount
         table_data.append([
             item["name"],
-            "5407",
+            item.get("hsn_code") or ITEM_HSN_CODES.get(item["name"], DEFAULT_HSN_CODE),
             f"{item['qty']:.2f}",
             item["unit"],
             f"{item['rate']:.2f}",

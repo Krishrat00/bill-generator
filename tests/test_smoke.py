@@ -32,6 +32,7 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SURAT TEXTILES", response.data)
         self.assertIn(b"FAST TRANSPORT", response.data)
+        self.assertIn(b'data-hsn="6203"', response.data)
 
     def test_pending_approve_and_reject(self):
         response = self.client.post("/add_pending", json={
@@ -171,14 +172,16 @@ class SmokeTests(unittest.TestCase):
             "gstin": "24ABCDE1234F1ZY",
             "transport": "FAST TRANSPORT",
             "transport_gstin": "24ABCDE1234F1ZY",
-            "item_name[]": ["COTTON"],
-            "qty[]": ["2"],
-            "unit[]": ["Mtr"],
-            "rate[]": ["100"],
+            "item_name[]": ["COTTON", "KURTA"],
+            "qty[]": ["2", "1"],
+            "unit[]": ["Mtr", "Pcs"],
+            "rate[]": ["100", "250"],
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/pdf")
         self.assertTrue(response.data.startswith(b"%PDF"))
+        bill = data_manager.get_bill("TEST-001")
+        self.assertEqual([item["hsn_code"] for item in bill["bill"]["items"]], ["5407", "6203"])
 
 
 if __name__ == "__main__":

@@ -85,6 +85,7 @@
               <option value="CHECKS">CHECKS</option>
               <option value="SAREE">SAREE</option>
               <option value="MODI">MODI</option>
+              <option value="KURTA" data-hsn="6203">KURTA</option>
             </select>
           </div>
           <div class="col-6 col-md-2">
@@ -147,6 +148,7 @@
         <option value="CHECKS">CHECKS</option>
         <option value="SAREE">SAREE</option>
         <option value="MODI">MODI</option>
+        <option value="KURTA" data-hsn="6203">KURTA</option>
 
       </select>
     </div>
@@ -397,6 +399,7 @@
 
       // Collect invoice data to sessionStorage
       const items = [];
+      const itemHsnCodes = {{ item_hsn_codes|tojson }};
       const names = form.querySelectorAll("select[name='item_name[]']");
       const qtys = form.querySelectorAll("input[name='qty[]']");
       const rates = form.querySelectorAll("input[name='rate[]']");
@@ -408,6 +411,7 @@
           total_value += itemTotal;
           items.push({
             name: names[i].value,
+            hsn_code: names[i].selectedOptions[0].dataset.hsn || itemHsnCodes[names[i].value] || "5407",
             qty: parseFloat(qtys[i].value),
             rate: parseFloat(rates[i].value),
             amount: itemTotal
@@ -426,7 +430,8 @@
         pin: form.querySelector("input[name='pincode']").value,
         transport: form.querySelector("select[name='transport']").value,
         transport_gstin: form.querySelector("input#transport_gstin").value,
-        total_value: total_value.toFixed(2)
+        total_value: total_value.toFixed(2),
+        hsn_codes: [...new Set(items.map(item => item.hsn_code))]
       };
       console.log(invoiceData);
       console.log(transport_gstin);
