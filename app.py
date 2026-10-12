@@ -4,7 +4,7 @@ from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-from bill_template import generate_invoice
+from bill_template import DEFAULT_HSN_CODE, ITEM_HSN_CODES, generate_invoice
 from data_manager import DatabaseManager, normalize_gstin, normalize_pincode, normalize_text
 from db import DB_BACKEND, get_collection
 
@@ -22,7 +22,12 @@ last_location_request = 0.0
 def form():
     parties = data_manager.get_all_parties()
     transports = data_manager.get_all_transports()
-    return render_template("form.html", parties=parties, transports=transports)
+    return render_template(
+        "form.html",
+        parties=parties,
+        transports=transports,
+        item_hsn_codes=ITEM_HSN_CODES,
+    )
 
 @app.route("/get_party_details")
 def get_party_details():
@@ -163,8 +168,9 @@ def download():
         if name and qty and unit and rate:
             data["items"].append({
                 "name": name,
+                "hsn_code": ITEM_HSN_CODES.get(name, DEFAULT_HSN_CODE),
                 "qty": float(qty),
-                "unit": unit,
+                "unit": "Pcs" if name == "KURTA" else unit,
                 "rate": float(rate)
             })
 

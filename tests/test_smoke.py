@@ -10,6 +10,7 @@ os.environ["DB_BACKEND"] = "sqlite"
 os.environ["SQLITE_PATH"] = DB_FILE
 
 from app import app, data_manager
+from bill_template import build_item_table_rows
 
 
 class SmokeTests(unittest.TestCase):
@@ -32,6 +33,7 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"SURAT TEXTILES", response.data)
         self.assertIn(b"FAST TRANSPORT", response.data)
+        self.assertIn(b'data-hsn="6203"', response.data)
 
     def test_pending_approve_and_reject(self):
         response = self.client.post("/add_pending", json={
@@ -171,14 +173,27 @@ class SmokeTests(unittest.TestCase):
             "gstin": "24ABCDE1234F1ZY",
             "transport": "FAST TRANSPORT",
             "transport_gstin": "24ABCDE1234F1ZY",
-            "item_name[]": ["COTTON"],
-            "qty[]": ["2"],
-            "unit[]": ["Mtr"],
-            "rate[]": ["100"],
+            "item_name[]": ["COTTON", "KURTA"],
+            "qty[]": ["2", "1"],
+            "unit[]": ["Mtr", "Mtr"],
+            "rate[]": ["100", "250"],
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.mimetype, "application/pdf")
         self.assertTrue(response.data.startswith(b"%PDF"))
+        bill = data_manager.get_bill("TEST-001")
+        self.assertEqual([item["hsn_code"] for item in bill["bill"]["items"]], ["5407", "6203"])
+        self.assertEqual([item["unit"] for item in bill["bill"]["items"]], ["Mtr", "Pcs"])
+
+    def test_pdf_item_rows_group_hsn_without_extra_gap(self):
+        rows, total = build_item_table_rows([
+            {"name": "KURTA", "qty": 1, "unit": "Pcs", "rate": 250, "hsn_code": "6203"},
+            {"name": "COTTON", "qty": 2, "unit": "Mtr", "rate": 100, "hsn_code": "5407"},
+        ])
+        self.assertEqual(rows[0][1], "5407")
+        self.assertEqual(rows[1][1], "6203")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(total, 450)
 
 
 if __name__ == "__main__":
