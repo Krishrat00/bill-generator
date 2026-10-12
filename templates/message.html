@@ -14,6 +14,11 @@
       <code id="smsText"></code>
     </div>
 
+    <div id="hsnChoice" class="mb-3" hidden>
+      <label for="hsnCode" class="form-label">HSN code for SMS:</label>
+      <select id="hsnCode" class="form-select"></select>
+    </div>
+
     <p>Once you receive the E-Way Bill Number (EWB No) from SMS reply, enter it below:</p>
 
     <form id="ewbForm">
@@ -29,8 +34,23 @@
   <script>
   const invoiceData = JSON.parse(sessionStorage.getItem("current_invoice") || "{}");
   console.log("Invoice Data:", invoiceData);
-  const sms = `EWBG OSUP 24AHJPR6707K1ZY ${invoiceData.party_gstin || ""} ${invoiceData.pin || ""} ${invoiceData.invoice_no || ""} ${invoiceData.date?.replaceAll("-", "") || ""} ${invoiceData.total_value || ""} ${invoiceData.hsn || "5407"} ${invoiceData.distance || "50"} ${invoiceData.vehicle || ""}`;
-  document.getElementById("smsText").textContent = sms;
+  const hsnCodes = [...new Set(invoiceData.hsn_codes || [invoiceData.hsn || "5407"] )];
+  const hsnChoice = document.getElementById("hsnChoice");
+  const hsnSelect = document.getElementById("hsnCode");
+
+  if (hsnCodes.length > 1) {
+    hsnCodes.forEach(code => hsnSelect.add(new Option(code, code)));
+    hsnChoice.hidden = false;
+  }
+
+  function renderSms() {
+    const hsnCode = hsnCodes.length > 1 ? hsnSelect.value : hsnCodes[0];
+    const sms = `EWBG OSUP 24AHJPR6707K1ZY ${invoiceData.party_gstin || ""} ${invoiceData.pin || ""} ${invoiceData.invoice_no || ""} ${invoiceData.date?.replaceAll("-", "") || ""} ${invoiceData.total_value || ""} ${hsnCode} ${invoiceData.distance || "50"} ${invoiceData.vehicle || ""}`;
+    document.getElementById("smsText").textContent = sms;
+  }
+
+  hsnSelect.addEventListener("change", renderSms);
+  renderSms();
 
   document.getElementById("openEWBPage").addEventListener("click", async () => {
     const ewbNo = document.getElementById("ewbNo").value.trim();

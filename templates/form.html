@@ -85,6 +85,7 @@
               <option value="CHECKS">CHECKS</option>
               <option value="SAREE">SAREE</option>
               <option value="MODI">MODI</option>
+              <option value="KURTA" data-hsn="6203">KURTA</option>
             </select>
           </div>
           <div class="col-6 col-md-2">
@@ -127,6 +128,24 @@
 
   // Set the value of the date input
   document.getElementById('billDate').value = formattedDate;
+
+    function syncItemUnit(itemSelect) {
+      const unitSelect = itemSelect.closest('.row').querySelector('select[name="unit[]"]');
+      const isKurta = itemSelect.value === 'KURTA';
+      unitSelect.value = isKurta ? 'Pcs' : 'Mtr';
+      Array.from(unitSelect.options).forEach(option => {
+        option.disabled = isKurta && option.value !== 'Pcs';
+      });
+    }
+
+    document.getElementById('items').addEventListener('change', event => {
+      if (event.target.matches('select[name="item_name[]"]')) {
+        syncItemUnit(event.target);
+      }
+    });
+
+    document.querySelectorAll('#items select[name="item_name[]"]').forEach(syncItemUnit);
+
     function addItem() {
       const row = document.createElement("div");
       row.className = "row mb-1";
@@ -147,6 +166,7 @@
         <option value="CHECKS">CHECKS</option>
         <option value="SAREE">SAREE</option>
         <option value="MODI">MODI</option>
+        <option value="KURTA" data-hsn="6203">KURTA</option>
 
       </select>
     </div>
@@ -159,7 +179,9 @@
       </select>
     </div>    
     <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`;
-      document.getElementById("items").appendChild(row);
+      const itemsContainer = document.getElementById("items");
+      itemsContainer.appendChild(row);
+      syncItemUnit(row.querySelector('select[name="item_name[]"]'));
     }
 
   </script>
@@ -397,6 +419,7 @@
 
       // Collect invoice data to sessionStorage
       const items = [];
+      const itemHsnCodes = {{ item_hsn_codes|tojson }};
       const names = form.querySelectorAll("select[name='item_name[]']");
       const qtys = form.querySelectorAll("input[name='qty[]']");
       const rates = form.querySelectorAll("input[name='rate[]']");
@@ -408,6 +431,7 @@
           total_value += itemTotal;
           items.push({
             name: names[i].value,
+            hsn_code: names[i].selectedOptions[0].dataset.hsn || itemHsnCodes[names[i].value] || "5407",
             qty: parseFloat(qtys[i].value),
             rate: parseFloat(rates[i].value),
             amount: itemTotal
@@ -426,7 +450,8 @@
         pin: form.querySelector("input[name='pincode']").value,
         transport: form.querySelector("select[name='transport']").value,
         transport_gstin: form.querySelector("input#transport_gstin").value,
-        total_value: total_value.toFixed(2)
+        total_value: total_value.toFixed(2),
+        hsn_codes: [...new Set(items.map(item => item.hsn_code))]
       };
       console.log(invoiceData);
       console.log(transport_gstin);

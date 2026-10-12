@@ -7,6 +7,35 @@ from reportlab.lib.units import mm
 from num2words import num2words  # pip install num2words
 from db import get_collection
 
+DEFAULT_HSN_CODE = "5407"
+ITEM_HSN_CODES = {"KURTA": "6203"}
+
+def build_item_table_rows(items):
+    items_by_hsn = {}
+    for item in items:
+        hsn_code = item.get("hsn_code") or ITEM_HSN_CODES.get(item["name"], DEFAULT_HSN_CODE)
+        items_by_hsn.setdefault(hsn_code, []).append(item)
+
+    ordered_hsn_codes = sorted(
+        items_by_hsn,
+        key=lambda code: (code != DEFAULT_HSN_CODE, code != "6203"),
+    )
+    rows = []
+    total = 0
+    for hsn_code in ordered_hsn_codes:
+        for item in items_by_hsn[hsn_code]:
+            amount = item["qty"] * item["rate"]
+            total += amount
+            rows.append([
+                item["name"],
+                hsn_code,
+                f"{item['qty']:.2f}",
+                item["unit"],
+                f"{item['rate']:.2f}",
+                f"{amount:.2f}",
+            ])
+    return rows, total
+
 def sanitize_string(s):
     """
     Removes unwanted special characters and normalizes whitespace.
@@ -97,18 +126,8 @@ def generate_invoice(data, filename="invoice_fixed.pdf"):
 
     # ===== ITEM TABLE =====
     table_data = [["Item", "HSN/SAC", "Qty", "Unit", "Rate", "Amount"]]
-    total = 0
-    for item in data["items"]:
-        amount = item["qty"] * item["rate"]
-        total += amount
-        table_data.append([
-            item["name"],
-            "5407",
-            f"{item['qty']:.2f}",
-            item["unit"],
-            f"{item['rate']:.2f}",
-            f"{amount:.2f}"
-        ])
+    item_rows, total = build_item_table_rows(data["items"])
+    table_data.extend(item_rows)
 
     # Pad to 15 item rows (excluding header)
     while len(table_data) < 16:
