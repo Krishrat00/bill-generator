@@ -128,6 +128,24 @@
 
   // Set the value of the date input
   document.getElementById('billDate').value = formattedDate;
+
+    function syncItemUnit(itemSelect) {
+      const unitSelect = itemSelect.closest('.row').querySelector('select[name="unit[]"]');
+      const isKurta = itemSelect.value === 'KURTA';
+      unitSelect.value = isKurta ? 'Pcs' : 'Mtr';
+      Array.from(unitSelect.options).forEach(option => {
+        option.disabled = isKurta && option.value !== 'Pcs';
+      });
+    }
+
+    document.getElementById('items').addEventListener('change', event => {
+      if (event.target.matches('select[name="item_name[]"]')) {
+        syncItemUnit(event.target);
+      }
+    });
+
+    document.querySelectorAll('#items select[name="item_name[]"]').forEach(syncItemUnit);
+
     function addItem() {
       const row = document.createElement("div");
       row.className = "row mb-1";
@@ -161,7 +179,9 @@
       </select>
     </div>    
     <div class="col-6 col-md-2"><input type="number" step="0.01" name="rate[]" class="form-control" placeholder="Rate" required></div>`;
-      document.getElementById("items").appendChild(row);
+      const itemsContainer = document.getElementById("items");
+      itemsContainer.appendChild(row);
+      syncItemUnit(row.querySelector('select[name="item_name[]"]'));
     }
 
   </script>

@@ -170,7 +170,7 @@ def download():
                 "name": name,
                 "hsn_code": ITEM_HSN_CODES.get(name, DEFAULT_HSN_CODE),
                 "qty": float(qty),
-                "unit": unit,
+                "unit": "Pcs" if name == "KURTA" else unit,
                 "rate": float(rate)
             })
 
