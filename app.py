@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect
-import io, json, os, re, time
+import io, json, math, os, re, time
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
@@ -289,6 +289,7 @@ def admin_analytics():
     period_bills = data_manager.get_bills_between(start_at, end_at)
     total_value = 0.0
     party_totals = {}
+    item_totals = {}
     enriched_bills = []
 
     for bill_record in period_bills:
@@ -296,9 +297,50 @@ def admin_analytics():
         amount = float(bill_record.get("total_value") or 0)
         party_name = bill.get("party_name") or "Unknown party"
         total_value += amount
-        party_total = party_totals.setdefault(party_name, {"amount": 0.0, "bill_count": 0})
+        party_total = party_totals.setdefault(party_name, {
+            "amount": 0.0,
+            "bill_count": 0,
+            "item_rates": {},
+        })
         party_total["amount"] += amount
         party_total["bill_count"] += 1
+
+        for item in bill.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            item_name = normalize_text(item.get("name", ""))
+            unit = str(item.get("unit") or "").strip()
+            if not item_name or not unit:
+                continue
+            try:
+                quantity = float(item.get("qty"))
+                rate = float(item.get("rate"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(quantity) or not math.isfinite(rate) or quantity <= 0 or rate < 0:
+                continue
+
+            item_key = (item_name, unit.casefold())
+            item_total = item_totals.setdefault(item_key, {
+                "name": item_name,
+                "unit": unit,
+                "quantity": 0.0,
+                "amount": 0.0,
+                "line_count": 0,
+                "min_rate": rate,
+                "max_rate": rate,
+            })
+            item_total["quantity"] += quantity
+            item_total["amount"] += quantity * rate
+            item_total["line_count"] += 1
+            item_total["min_rate"] = min(item_total["min_rate"], rate)
+            item_total["max_rate"] = max(item_total["max_rate"], rate)
+            party_item_rates = party_total["item_rates"].setdefault(item_key, {
+                "min_rate": rate,
+                "max_rate": rate,
+            })
+            party_item_rates["min_rate"] = min(party_item_rates["min_rate"], rate)
+            party_item_rates["max_rate"] = max(party_item_rates["max_rate"], rate)
 
         created_at = bill_record.get("created_at")
         try:
@@ -337,6 +379,27 @@ def admin_analytics():
         key=lambda party: party["amount"],
         reverse=True,
     )
+    item_summaries = sorted(
+        (
+            {
+                **values,
+                "key": key,
+                "average_rate": values["amount"] / values["quantity"],
+            }
+            for key, values in item_totals.items()
+        ),
+        key=lambda item: item["quantity"],
+        reverse=True,
+    )
+    item_columns = [
+        {"name": item["name"], "unit": item["unit"]}
+        for item in item_summaries
+    ]
+    for party in party_summaries:
+        party["item_rates"] = [
+            party["item_rates"].get(item["key"])
+            for item in item_summaries
+        ]
     return render_template(
         "admin_analytics.html",
         bills=enriched_bills[:10],
@@ -344,6 +407,8 @@ def admin_analytics():
         total_value=total_value,
         party_summaries=party_summaries,
         party_count=len(party_summaries),
+        item_columns=item_columns,
+        item_summaries=item_summaries,
         chart_days=chart_days,
         chart_max=chart_max,
         view=view,

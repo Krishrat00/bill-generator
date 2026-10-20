@@ -93,9 +93,21 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(response.get_json()["status"], "deleted")
 
     def test_admin_analytics_requires_login_and_shows_recent_totals(self):
-        data_manager.save_bill("ANALYTICS-001", {"party_name": "SURAT TEXTILES"}, 300)
-        data_manager.save_bill("ANALYTICS-002", {"party_name": "OTHER PARTY"}, 200)
-        data_manager.save_bill("ANALYTICS-003", {"party_name": "SURAT TEXTILES"}, 100)
+        data_manager.save_bill("ANALYTICS-001", {
+            "party_name": "SURAT TEXTILES",
+            "items": [
+                {"name": "COTTON", "qty": 2, "unit": "Mtr", "rate": 100},
+                {"name": "KURTA", "qty": 1, "unit": "Pcs", "rate": 250},
+            ],
+        }, 300)
+        data_manager.save_bill("ANALYTICS-002", {
+            "party_name": "OTHER PARTY",
+            "items": [{"name": "COTTON", "qty": 1, "unit": "Mtr", "rate": 150}],
+        }, 200)
+        data_manager.save_bill("ANALYTICS-003", {
+            "party_name": "SURAT TEXTILES",
+            "items": [{"name": "COTTON", "qty": 3, "unit": "Mtr", "rate": 120}],
+        }, 100)
         response = self.client.get("/admin/analytics")
         self.assertEqual(response.status_code, 302)
         self.assertIn("/admin/login", response.location)
@@ -106,6 +118,22 @@ class SmokeTests(unittest.TestCase):
         response = self.client.get(f"/admin/analytics?view=month&month={current_month}")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Party-wise amount", response.data)
+        html = response.data.decode("utf-8")
+        party_table = html.split('<section class="parties"', 1)[1].split('<section class="items"', 1)[0]
+        self.assertIn("COTTON (Mtr)", party_table)
+        self.assertIn("KURTA (Pcs)", party_table)
+        self.assertIn("SURAT TEXTILES", party_table)
+        self.assertIn("₹100.00", party_table)
+        self.assertIn("₹120.00", party_table)
+        self.assertIn("₹150.00", party_table)
+        self.assertIn("OTHER PARTY", party_table)
+        self.assertIn("—</td><td>—", party_table)
+        self.assertIn(b"Item-wise sales", response.data)
+        self.assertIn(b"6.00 Mtr", response.data)
+        self.assertIn(b"118.33", response.data)
+        self.assertIn(b"100.00", response.data)
+        self.assertIn(b"150.00", response.data)
+        self.assertIn(b"1.00 Pcs", response.data)
         self.assertIn(b"Billed amount by day", response.data)
         self.assertIn(b"Daily amounts", response.data)
         self.assertIn(b"ANALYTICS-001", response.data)
