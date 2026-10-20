@@ -133,14 +133,28 @@
         .chart-day:nth-child(2n) .bar { background: var(--coral); }
         .day-label { color: var(--muted); font-size: 11px; text-align: center; }
 
-        .recent, .parties, .dates { padding-top: 30px; }
+        .recent, .parties, .items, .dates { padding-top: 30px; }
         .table-wrap { overflow-x: auto; border-top: 1px solid var(--line); }
         table { width: 100%; border-collapse: collapse; text-align: left; }
+        .items table { text-align: center; }
+        .parties table { text-align: center; }
+        .parties table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+        .parties col.party-name { width: 170px; }
+        .parties col.party-bills { width: 70px; }
+        .parties col.party-amount { width: 125px; }
+        .parties col.party-item-rate { width: 115px; }
+        .parties .party-fixed { position: sticky; background: var(--paper); z-index: 2; }
+        .parties th.party-fixed { z-index: 3; }
+        .parties .party-fixed-1 { left: 0; }
+        .parties .party-fixed-2 { left: 170px; }
+        .parties .party-fixed-3 { left: 240px; box-shadow: 5px 0 8px -5px rgba(24, 53, 45, .45); }
         th, td { padding: 12px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
         th { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; }
         td { font-size: 13px; }
         td.amount { text-align: right; font-weight: 700; }
         th:last-child { text-align: right; }
+        .items th:last-child, .items td.amount { text-align: center; }
+        .parties th:last-child, .parties td.amount { text-align: center; }
         .empty { padding: 24px 10px; color: var(--muted); text-align: center; }
         .table-note { color: var(--muted); font-size: 12px; }
 
@@ -160,7 +174,7 @@
             .period-form label { flex: 1; }
             .period-form input { width: 100%; }
             .chart { gap: 5px; }
-            .recent, .parties, .dates { padding-top: 24px; }
+            .recent, .parties, .items, .dates { padding-top: 24px; }
         }
 
         @media (max-width: 390px) {
@@ -268,12 +282,72 @@
             </div>
             <div class="table-wrap">
                 <table>
-                    <thead><tr><th>Party</th><th>Bills</th><th>Amount</th></tr></thead>
+                    <colgroup>
+                        <col class="party-name">
+                        <col class="party-bills">
+                        <col class="party-amount">
+                        {% for item in item_columns %}
+                        <col class="party-item-rate"><col class="party-item-rate">
+                        {% endfor %}
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th class="party-fixed party-fixed-1" rowspan="2">Party</th>
+                            <th class="party-fixed party-fixed-2" rowspan="2">Bills</th>
+                            <th class="party-fixed party-fixed-3" rowspan="2">Amount</th>
+                            {% for item in item_columns %}
+                            <th colspan="2">{{ item.name }} ({{ item.unit }})</th>
+                            {% endfor %}
+                        </tr>
+                        <tr>
+                            {% for item in item_columns %}
+                            <th>Min Price</th><th>Max Price</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
                     <tbody>
                         {% for party in party_summaries %}
-                        <tr><td>{{ party.name }}</td><td>{{ party.bill_count }}</td><td class="amount">₹{{ "{:,.2f}".format(party.amount) }}</td></tr>
+                        <tr>
+                            <td class="party-fixed party-fixed-1">{{ party.name }}</td>
+                            <td class="party-fixed party-fixed-2">{{ party.bill_count }}</td>
+                            <td class="amount party-fixed party-fixed-3">₹{{ "{:,.2f}".format(party.amount) }}</td>
+                            {% for rates in party.item_rates %}
+                            {% if rates %}
+                            <td>₹{{ "{:,.2f}".format(rates.min_rate) }}</td>
+                            <td>₹{{ "{:,.2f}".format(rates.max_rate) }}</td>
+                            {% else %}
+                            <td>—</td><td>—</td>
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
                         {% else %}
-                        <tr><td class="empty" colspan="3">No bills found for {{ period_label }}.</td></tr>
+                        <tr><td class="empty" colspan="{{ 3 + item_columns|length * 2 }}">No bills found for {{ period_label }}.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="items" aria-labelledby="item-title">
+            <div class="section-heading">
+                <h2 id="item-title">Item-wise sales</h2>
+                <span>Ranked by quantity sold · average rate weighted by quantity</span>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Item</th><th>Lines</th><th>Quantity sold</th><th>Average rate</th><th>Min rate</th><th>Max rate</th></tr></thead>
+                    <tbody>
+                        {% for item in item_summaries %}
+                        <tr>
+                            <td>{{ item.name }}</td>
+                            <td>{{ item.line_count }}</td>
+                            <td>{{ "{:,.2f}".format(item.quantity) }} {{ item.unit }}</td>
+                            <td class="amount">₹{{ "{:,.2f}".format(item.average_rate) }} / {{ item.unit }}</td>
+                            <td class="amount">₹{{ "{:,.2f}".format(item.min_rate) }} / {{ item.unit }}</td>
+                            <td class="amount">₹{{ "{:,.2f}".format(item.max_rate) }} / {{ item.unit }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td class="empty" colspan="6">No item details found for {{ period_label }}.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
