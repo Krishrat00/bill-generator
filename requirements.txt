@@ -1,5 +1,5 @@
 Flask
-reportlab
+reportlab<4.3
 Pillow
 pdf2image
 num2words
